@@ -46,20 +46,20 @@ return view.extend({
 		o.rmempty = false;
 		o.description = _('CAKE-MQ requires at least two WAN transmit queues. On some OpenWrt 25.12 builds it may reduce throughput; compare under load before keeping it enabled.');
 
-		o = s.option(form.Value, 'download', _('Download limit (Mbit/s)'));
+		o = s.option(form.Value, 'download', _('Download limit (Mbps)'));
 		o.default = '93';
 		o.rmempty = false;
 		o.validate = function(section_id, value) {
 			return /^\d+(\.\d+)?$/.test(value) && Number(value) > 0
-				? true : _('Enter a positive speed in Mbit/s.');
+				? true : _('Enter a positive speed in Mbps.');
 		};
 
-		o = s.option(form.Value, 'upload', _('Upload limit (Mbit/s)'));
+		o = s.option(form.Value, 'upload', _('Upload limit (Mbps)'));
 		o.default = '19';
 		o.rmempty = false;
 		o.validate = function(section_id, value) {
 			return /^\d+(\.\d+)?$/.test(value) && Number(value) > 0
-				? true : _('Enter a positive speed in Mbit/s.');
+				? true : _('Enter a positive speed in Mbps.');
 		};
 		o.description = _('Set this to about 93–95% of your measured upload speed.');
 

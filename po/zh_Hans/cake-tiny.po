@@ -35,14 +35,14 @@ msgstr "CAKE-MQ（多队列）"
 msgid "CAKE-MQ requires at least two WAN transmit queues. On some OpenWrt 25.12 builds it may reduce throughput; compare under load before keeping it enabled."
 msgstr "CAKE-MQ 要求 WAN 网口至少有两个发送队列。某些 OpenWrt 25.12 版本可能降低吞吐量，建议实测对比后再长期启用。"
 
-msgid "Download limit (Mbit/s)"
-msgstr "下载速率（Mbit/s）"
+msgid "Download limit (Mbps)"
+msgstr "下载速率（Mbps）"
 
-msgid "Upload limit (Mbit/s)"
-msgstr "上传速率（Mbit/s）"
+msgid "Upload limit (Mbps)"
+msgstr "上传速率（Mbps）"
 
-msgid "Enter a positive speed in Mbit/s."
-msgstr "请输入大于零的速率，单位 Mbit/s。"
+msgid "Enter a positive speed in Mbps."
+msgstr "请输入大于零的速率，单位 Mbps。"
 
 msgid "Set this to about 93–95% of your measured upload speed."
 msgstr "建议设为实测上传速率的约 93–95%。"

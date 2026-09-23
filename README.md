@@ -2,7 +2,7 @@
 
 A small LuCI application for ImmortalWrt/OpenWrt 25.12. It shapes upload on the
 physical WAN interface and downloads through an IFB using `tc` and CAKE. The
-default configuration is `eth0`, 93 Mbit/s download and 19 Mbit/s upload,
+default configuration is `eth0`, 93 Mbps download and 19 Mbps upload,
 with `ethernet overhead 44 mpu 84` in both directions.
 The service starts disabled until you enable it in LuCI.
 
@@ -72,7 +72,7 @@ Configuration changes are handled by the procd UCI reload trigger.
 - `cake_mq` requires at least two WAN TX queues and an iproute2 `ip` utility
   that can create a multiqueue IFB. It is not a guaranteed speed improvement:
   OpenWrt 25.12 has a [reported low-throughput issue](https://github.com/openwrt/openwrt/issues/22344)
-  on some configurations. At 100 Mbit/s, keep regular `cake` unless a loaded
+  on some configurations. At 100 Mbps, keep regular `cake` unless a loaded
   latency and throughput comparison shows a benefit.
 - If CAKE counters do not increase under load, test with software flow
   offloading disabled. Hardware flow offloading should stay off for shaping.
