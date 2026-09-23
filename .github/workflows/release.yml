@@ -30,7 +30,6 @@ jobs:
     timeout-minutes: 25
     env:
       RELEASE_TAG: ${{ inputs.tag }}
-      TOOLS_DIR: ${{ runner.temp }}/packaging-tools
     steps:
       - uses: actions/checkout@v6
         with:
@@ -63,6 +62,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends "${packages[@]}"
 
       - name: Build APK, IPK and Chinese translation
+        env:
+          TOOLS_DIR: ${{ runner.temp }}/packaging-tools
         run: |
           bash .github/scripts/prepare-tools.sh
           bash .github/scripts/build-packages.sh
