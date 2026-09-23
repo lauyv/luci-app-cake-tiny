@@ -63,7 +63,7 @@ check_wan_conflicts() {
 }
 
 start_service() {
-	local enabled wan download upload overhead mpu old_wan old_wan_idx old_ifb_idx wan_idx ifb_idx
+	local enabled wan download upload overhead mpu qdisc old_wan old_wan_idx old_ifb_idx wan_idx ifb_idx txq wan_queues ifb_queues probe
 	config_load cake_tiny
 	config_get_bool enabled main enabled 0
 	if [ "$enabled" != 1 ]; then
@@ -75,15 +75,41 @@ start_service() {
 	config_get upload main upload 19
 	config_get overhead main overhead 44
 	config_get mpu main mpu 84
+	config_get qdisc main qdisc cake
 
 	if ! valid_device "$wan" || ! valid_rate "$download" || ! valid_rate "$upload" ||
-		! valid_overhead "$overhead" || ! valid_mpu "$mpu"; then
-		log "invalid interface, rate or link compensation in /etc/config/cake_tiny"
+		! valid_overhead "$overhead" || ! valid_mpu "$mpu" ||
+		{ [ "$qdisc" != cake ] && [ "$qdisc" != cake_mq ]; }; then
+		log "invalid interface, rate, qdisc or link compensation in /etc/config/cake_tiny"
 		return 1
 	fi
 	if [ ! -d "/sys/class/net/$wan" ]; then
 		log "interface $wan does not exist"
 		return 1
+	fi
+	if [ "$qdisc" = cake_mq ]; then
+		wan_queues=0
+		for txq in "/sys/class/net/$wan/queues"/tx-*; do
+			[ -d "$txq" ] && wan_queues=$((wan_queues + 1))
+		done
+		if [ "$wan_queues" -lt 2 ]; then
+			log "cake_mq requires at least two WAN TX queues; $wan has $wan_queues"
+			return 1
+		fi
+		# IFB must also be multiqueue. Keep its queue count modest.
+		ifb_queues="$(grep -c '^processor' /proc/cpuinfo 2>/dev/null)"
+		case "$ifb_queues" in ''|0|1) ifb_queues=2 ;; esac
+		[ "$ifb_queues" -le "$wan_queues" ] || ifb_queues="$wan_queues"
+		[ "$ifb_queues" -le 16 ] || ifb_queues=16
+		modprobe sch_cake 2>/dev/null
+		if [ ! -d /sys/module/sch_cake ]; then
+			log "cake_mq unavailable: sch_cake module is not loaded"
+			return 1
+		fi
+		if [ ! -x /usr/libexec/ip-tiny ] && [ ! -x /usr/libexec/ip-full ]; then
+			log "cake_mq requires ip-tiny or ip-full to create a multiqueue IFB"
+			return 1
+		fi
 	fi
 	if [ -f "$STATE" ]; then
 		read -r old_wan old_wan_idx old_ifb_idx <"$STATE"
@@ -97,11 +123,40 @@ start_service() {
 		[ "$(cat "/sys/class/net/$wan/ifindex" 2>/dev/null)" != "$old_wan_idx" ]; then
 		check_wan_conflicts "$wan" || return 1
 	fi
+	if [ "$qdisc" = cake_mq ]; then
+		# Probe support before removing rules owned by a previous configuration.
+		modprobe ifb 2>/dev/null
+		probe="ifbct$$"
+		if ! ip link add name "$probe" numtxqueues 2 type ifb; then
+			log "cake_mq preflight: failed to create multiqueue IFB"
+			return 1
+		fi
+		if [ ! -d "/sys/class/net/$probe/queues/tx-1" ] ||
+			! tc qdisc replace dev "$probe" root cake_mq bandwidth "${download}Mbit" besteffort ingress ethernet overhead "$overhead" mpu "$mpu"; then
+			ip link del "$probe" 2>/dev/null
+			log "cake_mq is not supported by this kernel, tc or ip utility"
+			return 1
+		fi
+		if ! ip link del "$probe"; then
+			log "cake_mq preflight: failed to remove temporary IFB $probe"
+			return 1
+		fi
+	fi
 	cleanup
 
 	modprobe ifb 2>/dev/null
-	if ! ip link add "$IFB" type ifb; then
+	if [ "$qdisc" = cake_mq ]; then
+		ip link add name "$IFB" numtxqueues "$ifb_queues" type ifb
+	else
+		ip link add "$IFB" type ifb
+	fi
+	if [ "$?" -ne 0 ]; then
 		log "failed to create $IFB"
+		return 1
+	fi
+	if [ "$qdisc" = cake_mq ] && [ ! -d "/sys/class/net/$IFB/queues/tx-1" ]; then
+		ip link del "$IFB" 2>/dev/null
+		log "failed to create multiqueue $IFB; check iproute2 support"
 		return 1
 	fi
 	# Remember device identities so cleanup cannot remove a recreated device.
@@ -113,15 +168,15 @@ start_service() {
 		return 1
 	fi
 	if ! ip link set "$IFB" up ||
-		! tc qdisc replace dev "$wan" root cake bandwidth "${upload}Mbit" besteffort ethernet overhead "$overhead" mpu "$mpu" ||
+		! tc qdisc replace dev "$wan" root "$qdisc" bandwidth "${upload}Mbit" besteffort ethernet overhead "$overhead" mpu "$mpu" ||
 		! tc qdisc replace dev "$wan" handle ffff: ingress ||
 		! tc filter replace dev "$wan" parent ffff: protocol all matchall action mirred egress redirect dev "$IFB" ||
-		! tc qdisc replace dev "$IFB" root cake bandwidth "${download}Mbit" besteffort ingress ethernet overhead "$overhead" mpu "$mpu"; then
-		log "failed to install CAKE rules"
+		! tc qdisc replace dev "$IFB" root "$qdisc" bandwidth "${download}Mbit" besteffort ingress ethernet overhead "$overhead" mpu "$mpu"; then
+		log "failed to install $qdisc rules"
 		cleanup
 		return 1
 	fi
-	log "enabled: wan=$wan down=${download}Mbit up=${upload}Mbit overhead=$overhead mpu=$mpu"
+	log "enabled: wan=$wan qdisc=$qdisc down=${download}Mbit up=${upload}Mbit overhead=$overhead mpu=$mpu"
 }
 
 stop_service() {
@@ -135,17 +190,19 @@ down() {
 }
 
 status_service() {
-	local active_wan active_wan_idx active_ifb_idx
+	local active_wan active_wan_idx active_ifb_idx qdisc
 	[ -f "$STATE" ] || {
 		echo "CAKE Tiny is inactive"
 		return 1
 	}
 	read -r active_wan active_wan_idx active_ifb_idx <"$STATE"
+	config_load cake_tiny
+	config_get qdisc main qdisc cake
 	if [ -n "$active_wan_idx" ] && [ -n "$active_ifb_idx" ] &&
 		[ "$(cat "/sys/class/net/$active_wan/ifindex" 2>/dev/null)" = "$active_wan_idx" ] &&
 		[ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" = "$active_ifb_idx" ] &&
-		tc qdisc show dev "$active_wan" 2>/dev/null | grep -Eq '^qdisc cake .* root ' &&
-		tc qdisc show dev "$IFB" 2>/dev/null | grep -Eq '^qdisc cake .* root ' &&
+		tc qdisc show dev "$active_wan" 2>/dev/null | grep -Eq "^qdisc ${qdisc} .* root " &&
+		tc qdisc show dev "$IFB" 2>/dev/null | grep -Eq "^qdisc ${qdisc} .* root " &&
 		tc filter show dev "$active_wan" parent ffff: 2>/dev/null | grep -q matchall; then
 		echo "CAKE Tiny is active on $active_wan"
 		return 0

@@ -1,6 +1,7 @@
 config cake_tiny 'main'
 	option enabled '0'
 	option wan 'eth0'
+	option qdisc 'cake'
 	option download '93'
 	option upload '19'
 	option overhead '44'

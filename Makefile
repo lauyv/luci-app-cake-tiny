@@ -1,11 +1,11 @@
 include $(TOPDIR)/rules.mk
 
 PKG_LICENSE:=GPL-2.0-only
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 
 LUCI_TITLE:=Tiny CAKE shaper (tc + IFB)
 LUCI_DESCRIPTION:=Minimal CAKE upload and download shaping without sqm-scripts
-LUCI_DEPENDS:=+luci-base +tc-tiny +kmod-ifb +kmod-sched-cake
+LUCI_DEPENDS:=+luci-base +tc-tiny +ip-tiny +kmod-ifb +kmod-sched-cake
 LUCI_URL:=https://github.com/lauyv/luci-app-cake-tiny
 
 define Build/Prepare/luci-app-cake-tiny
