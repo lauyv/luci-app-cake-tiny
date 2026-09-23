@@ -17,14 +17,10 @@ fi
 
 [ "$(uci -q get cake_tiny.main.enabled)" = 1 ] || exit 0
 [ -d "/sys/class/net/$WAN" ] || exit 0
-QDISC="$(uci -q get cake_tiny.main.qdisc)"
-[ -n "$QDISC" ] || QDISC=cake
-case "$QDISC" in cake|cake_mq) ;; *) exit 0 ;; esac
-
 # A normal link flap preserves qdiscs; only reapply after they disappear.
-if ! tc qdisc show dev "$WAN" 2>/dev/null | grep -Eq "^qdisc ${QDISC} .* root " ||
+if ! tc qdisc show dev "$WAN" 2>/dev/null | grep -Eq '^qdisc cake .* root ' ||
 	! tc qdisc show dev "$WAN" 2>/dev/null | grep -Eq '^qdisc ingress ' ||
-	! tc qdisc show dev ifb-cake 2>/dev/null | grep -Eq "^qdisc ${QDISC} .* root " ||
+	! tc qdisc show dev ifb-cake 2>/dev/null | grep -Eq '^qdisc cake .* root ' ||
 	! tc filter show dev "$WAN" parent ffff: 2>/dev/null | grep -q matchall; then
 	/etc/init.d/cake-tiny start
 fi

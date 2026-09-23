@@ -2,17 +2,13 @@
 
 A small LuCI application for ImmortalWrt/OpenWrt 25.12. It shapes upload on the
 physical WAN interface and downloads through an IFB using `tc` and CAKE. The
-default configuration is `eth0`, 93 Mbps download and 19 Mbps upload,
+default configuration is `eth0`, 140 Mbps download and 30 Mbps upload,
 with `ethernet overhead 44 mpu 84` in both directions.
 The service starts disabled until you enable it in LuCI.
 
 It uses `besteffort` in both directions and `ingress` on the IFB. It does not
 install `sqm-scripts`, NAT host isolation, DiffServ or UDP priority rules.
-The default qdisc is regular `cake`. LuCI also offers `cake_mq` for a physical
-WAN device with at least two transmit queues. In that mode the service creates
-a multiqueue IFB and applies `cake_mq` in both directions. It checks support
-before removing the previous rules; unsupported devices leave the prior
-configuration intact and produce a log message.
+Only the regular `cake` qdisc is supported.
 
 ## Build and install
 
@@ -26,7 +22,7 @@ make package/luci-app-cake-tiny/compile V=s
 ```
 
 Install the resulting `.apk` on the router with `apk add ./luci-app-cake-tiny-*.apk`.
-The package depends on `luci-base`, `tc-tiny`, `ip-tiny`, `kmod-ifb`, and
+The package depends on `luci-base`, `tc-tiny`, `kmod-ifb`, and
 `kmod-sched-cake` (which brings in `kmod-sched-core`).
 
 ## GitHub Actions release packages
@@ -53,6 +49,9 @@ not kernel modules.
 
 In LuCI, open **Network → CAKE Tiny**, check the physical WAN device and set
 the upload rate to suit your connection, then enable and **Save & Apply**.
+Package upgrades preserve an existing `/etc/config/cake_tiny`; change the rates
+manually in LuCI if you want the new 140/30 Mbps defaults on an existing router.
+An old `qdisc` UCI option is ignored by this version and may be removed.
 The page displays the current `tc` qdisc and ingress filter statistics.
 The init service starts at boot. A WAN `ifdown` event removes its rules, and
 `ifup` restores them. An `ifupdate` event restores missing rules. Removing or
@@ -69,11 +68,6 @@ Configuration changes are handled by the procd UCI reload trigger.
   that name.
 - The default 44-byte overhead is an initial FTTH setting, not a universal
   value. Adjust it and MPU to match your actual encapsulation.
-- `cake_mq` requires at least two WAN TX queues and an iproute2 `ip` utility
-  that can create a multiqueue IFB. It is not a guaranteed speed improvement:
-  OpenWrt 25.12 has a [reported low-throughput issue](https://github.com/openwrt/openwrt/issues/22344)
-  on some configurations. At 100 Mbps, keep regular `cake` unless a loaded
-  latency and throughput comparison shows a benefit.
 - If CAKE counters do not increase under load, test with software flow
   offloading disabled. Hardware flow offloading should stay off for shaping.
 - For manual checks, run `tc -s qdisc show dev eth0`,

@@ -23,18 +23,6 @@ msgstr "WAN 物理接口"
 msgid "Select an available WAN device."
 msgstr "请选择可用的 WAN 网口。"
 
-msgid "Queue discipline"
-msgstr "队列算法"
-
-msgid "CAKE (recommended)"
-msgstr "CAKE（推荐）"
-
-msgid "CAKE-MQ (multi-queue)"
-msgstr "CAKE-MQ（多队列）"
-
-msgid "CAKE-MQ requires at least two WAN transmit queues. On some OpenWrt 25.12 builds it may reduce throughput; compare under load before keeping it enabled."
-msgstr "CAKE-MQ 要求 WAN 网口至少有两个发送队列。某些 OpenWrt 25.12 版本可能降低吞吐量，建议实测对比后再长期启用。"
-
 msgid "Download limit (Mbps)"
 msgstr "下载速率（Mbps）"
 

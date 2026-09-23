@@ -39,15 +39,8 @@ return view.extend({
 				? true : _('Select an available WAN device.');
 		};
 
-		o = s.option(form.ListValue, 'qdisc', _('Queue discipline'));
-		o.value('cake', _('CAKE (recommended)'));
-		o.value('cake_mq', _('CAKE-MQ (multi-queue)'));
-		o.default = 'cake';
-		o.rmempty = false;
-		o.description = _('CAKE-MQ requires at least two WAN transmit queues. On some OpenWrt 25.12 builds it may reduce throughput; compare under load before keeping it enabled.');
-
 		o = s.option(form.Value, 'download', _('Download limit (Mbps)'));
-		o.default = '93';
+		o.default = '140';
 		o.rmempty = false;
 		o.validate = function(section_id, value) {
 			return /^\d+(\.\d+)?$/.test(value) && Number(value) > 0
@@ -55,7 +48,7 @@ return view.extend({
 		};
 
 		o = s.option(form.Value, 'upload', _('Upload limit (Mbps)'));
-		o.default = '19';
+		o.default = '30';
 		o.rmempty = false;
 		o.validate = function(section_id, value) {
 			return /^\d+(\.\d+)?$/.test(value) && Number(value) > 0
