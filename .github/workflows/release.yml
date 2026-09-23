@@ -1,0 +1,94 @@
+name: Release
+run-name: ${{ inputs.prerelease && 'Prerelease' || 'Release' }} ${{ inputs.tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'New release tag, e.g. v0.1.0'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark the release as a prerelease'
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      TOOLS_DIR: ${{ runner.temp }}/packaging-tools
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Validate release tag
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo 'Tag must be vMAJOR.MINOR.PATCH' >&2
+            exit 1
+          }
+
+      - name: Restore packaging tools
+        id: tools
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/packaging-tools
+          key: apk-tools-${{ runner.os }}-26.04-${{ runner.arch }}-${{ hashFiles('.github/scripts/prepare-tools.sh') }}
+
+      - name: Install packaging dependencies
+        env:
+          TOOLS_CACHED: ${{ steps.tools.outputs.cache-hit }}
+        run: |
+          packages=(binutils fakeroot build-essential)
+          if [[ "$TOOLS_CACHED" != true ]]; then
+            packages+=(meson ninja-build pkg-config libssl-dev zlib1g-dev)
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends "${packages[@]}"
+
+      - name: Build APK, IPK and Chinese translation
+        run: |
+          bash .github/scripts/prepare-tools.sh
+          bash .github/scripts/build-packages.sh
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: luci-app-cake-tiny-${{ inputs.tag }}
+          path: |
+            dist/*.apk
+            dist/*.ipk
+          if-no-files-found: error
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BUILD_SHA: ${{ github.sha }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          NOTES_FILE: ${{ runner.temp }}/cake-tiny-release-notes.md
+        run: |
+          bash .github/scripts/release-notes.sh
+          flags=()
+          if [[ "$PRERELEASE" == true ]]; then flags+=(--prerelease); fi
+          gh release create "$RELEASE_TAG" \
+            dist/luci-app-cake-tiny-*.apk dist/luci-app-cake-tiny_*.ipk \
+            --target "$BUILD_SHA" \
+            --title "$RELEASE_TAG" \
+            --notes-file "$NOTES_FILE" "${flags[@]}"

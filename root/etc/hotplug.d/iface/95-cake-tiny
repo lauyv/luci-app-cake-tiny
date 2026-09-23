@@ -1,0 +1,27 @@
+#!/bin/sh
+# shellcheck shell=busybox
+
+case "$ACTION" in
+	ifup|ifupdate|ifdown) ;;
+	*) exit 0 ;;
+esac
+
+WAN="$(uci -q get cake_tiny.main.wan)"
+[ -n "$WAN" ] || WAN=eth0
+[ "$INTERFACE" = wan ] || [ "$DEVICE" = "$WAN" ] || exit 0
+
+if [ "$ACTION" = ifdown ]; then
+	[ "$INTERFACE" = wan ] && /etc/init.d/cake-tiny down
+	exit 0
+fi
+
+[ "$(uci -q get cake_tiny.main.enabled)" = 1 ] || exit 0
+[ -d "/sys/class/net/$WAN" ] || exit 0
+
+# A normal link flap preserves qdiscs; only reapply after they disappear.
+if ! tc qdisc show dev "$WAN" 2>/dev/null | grep -Eq '^qdisc cake .* root ' ||
+	! tc qdisc show dev "$WAN" 2>/dev/null | grep -Eq '^qdisc ingress ' ||
+	! tc qdisc show dev ifb-cake 2>/dev/null | grep -Eq '^qdisc cake .* root ' ||
+	! tc filter show dev "$WAN" parent ffff: 2>/dev/null | grep -q matchall; then
+	/etc/init.d/cake-tiny start
+fi

@@ -1,0 +1,17 @@
+{
+	"luci-app-cake-tiny": {
+		"description": "Manage CAKE Tiny settings and view statistics",
+		"read": {
+			"uci": [ "cake_tiny" ],
+			"file": {
+				"/usr/libexec/cake-tiny-status": [ "exec" ]
+			},
+			"ubus": {
+				"file": [ "exec" ]
+			}
+		},
+		"write": {
+			"uci": [ "cake_tiny" ]
+		}
+	}
+}

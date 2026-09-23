@@ -1,0 +1,20 @@
+#!/bin/sh
+
+WAN="$(uci -q get cake_tiny.main.wan)"
+[ -n "$WAN" ] || WAN=eth0
+case "$WAN" in
+	*[!a-zA-Z0-9_.:-]*|'') exit 1 ;;
+esac
+
+if [ -f /var/run/cake-tiny.wan ]; then
+	read -r ACTIVE_WAN WAN_IDX IFB_IDX </var/run/cake-tiny.wan
+	printf 'CAKE Tiny: configured on %s\n\n' "$ACTIVE_WAN"
+else
+	printf 'CAKE Tiny: inactive\n\n'
+fi
+printf '%s\n' "WAN ($WAN):"
+tc -s qdisc show dev "$WAN" 2>&1
+printf '\n%s\n' 'IFB (ifb-cake):'
+tc -s qdisc show dev ifb-cake 2>&1
+printf '\n%s\n' "Ingress filter ($WAN):"
+tc filter show dev "$WAN" parent ffff: 2>&1

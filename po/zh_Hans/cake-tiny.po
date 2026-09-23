@@ -1,0 +1,57 @@
+msgid ""
+msgstr ""
+"Language: zh_Hans\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "CAKE Tiny"
+msgstr "简易 CAKE 限速"
+
+msgid "Simple upload and download shaping with tc, IFB and CAKE. No sqm-scripts or traffic priority rules are used. Save & Apply updates the service."
+msgstr "使用 tc、IFB 和 CAKE 对上传、下载进行整形。不使用 sqm-scripts 或流量优先级规则。保存并应用后更新服务。"
+
+msgid "Settings"
+msgstr "设置"
+
+msgid "Enable"
+msgstr "启用"
+
+msgid "Physical WAN device"
+msgstr "WAN 物理接口"
+
+msgid "Select an available WAN device."
+msgstr "请选择可用的 WAN 网口。"
+
+msgid "Download limit (Mbit/s)"
+msgstr "下载速率（Mbit/s）"
+
+msgid "Upload limit (Mbit/s)"
+msgstr "上传速率（Mbit/s）"
+
+msgid "Enter a positive speed in Mbit/s."
+msgstr "请输入大于零的速率，单位 Mbit/s。"
+
+msgid "Set this to about 93–95% of your measured upload speed."
+msgstr "建议设为实测上传速率的约 93–95%。"
+
+msgid "Current tc statistics"
+msgstr "当前 tc 统计"
+
+msgid "Per-packet overhead (bytes)"
+msgstr "每包额外开销（字节）"
+
+msgid "Ethernet framing is enabled. Adjust the overhead for your FTTH encapsulation."
+msgstr "已启用以太网帧补偿。请根据实际 FTTH 封装方式调整额外开销。"
+
+msgid "Minimum packet unit (bytes)"
+msgstr "最小计费包长（字节）"
+
+msgid "Enter an integer from 0 to 256."
+msgstr "请输入 0 到 256 的整数。"
+
+msgid "No statistics available."
+msgstr "暂无统计数据。"
+
+msgid "Status unavailable: %s"
+msgstr "无法获取状态：%s"

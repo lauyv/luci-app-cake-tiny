@@ -1,0 +1,163 @@
+#!/bin/sh /etc/rc.common
+# shellcheck shell=busybox
+
+START=95
+STOP=10
+USE_PROCD=1
+EXTRA_COMMANDS="down"
+EXTRA_HELP="down             Remove rules while retaining config reload triggers"
+
+IFB=ifb-cake
+STATE=/var/run/cake-tiny.wan
+
+log() {
+	logger -t cake-tiny "$*"
+}
+
+valid_rate() {
+	printf '%s\n' "$1" | grep -Eq '^[0-9]+([.][0-9]+)?$' &&
+		awk -v rate="$1" 'BEGIN { exit !(rate > 0) }'
+}
+
+valid_device() {
+	printf '%s\n' "$1" | grep -Eq '^[a-zA-Z0-9_.:-]{1,15}$' && [ "$1" != "$IFB" ]
+}
+
+valid_overhead() {
+	printf '%s\n' "$1" | grep -Eq '^[0-9]{1,3}$' && [ "$1" -le 256 ]
+}
+
+valid_mpu() {
+	printf '%s\n' "$1" | grep -Eq '^[0-9]{1,3}$' && [ "$1" -le 256 ]
+}
+
+cleanup() {
+	[ -f "$STATE" ] || return 0
+	read -r old_wan old_wan_idx old_ifb_idx <"$STATE"
+	if valid_device "$old_wan" && [ -n "$old_wan_idx" ] &&
+		[ "$(cat "/sys/class/net/$old_wan/ifindex" 2>/dev/null)" = "$old_wan_idx" ]; then
+		tc qdisc del dev "$old_wan" ingress 2>/dev/null
+		tc qdisc del dev "$old_wan" root 2>/dev/null
+	fi
+	if [ -n "$old_ifb_idx" ] &&
+		[ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" = "$old_ifb_idx" ]; then
+		tc qdisc del dev "$IFB" root 2>/dev/null
+		ip link set "$IFB" down 2>/dev/null
+		ip link del "$IFB" 2>/dev/null
+	fi
+	rm -f "$STATE"
+}
+
+check_wan_conflicts() {
+	local qdiscs
+	qdiscs="$(tc qdisc show dev "$1")" || return 1
+	if printf '%s\n' "$qdiscs" | grep -Eq '^qdisc (ingress|clsact) '; then
+		log "$1 already has an ingress/clsact qdisc"
+		return 1
+	fi
+	if printf '%s\n' "$qdiscs" | grep -E '^qdisc .* root ' |
+		grep -Ev '^qdisc (mq|noqueue|fq_codel|pfifo_fast) 0: root ' | grep -q .; then
+		log "$1 already has a non-default root qdisc"
+		return 1
+	fi
+}
+
+start_service() {
+	local enabled wan download upload overhead mpu old_wan old_wan_idx old_ifb_idx wan_idx ifb_idx
+	config_load cake_tiny
+	config_get_bool enabled main enabled 0
+	if [ "$enabled" != 1 ]; then
+		cleanup
+		return 0
+	fi
+	config_get wan main wan eth0
+	config_get download main download 93
+	config_get upload main upload 19
+	config_get overhead main overhead 44
+	config_get mpu main mpu 84
+
+	if ! valid_device "$wan" || ! valid_rate "$download" || ! valid_rate "$upload" ||
+		! valid_overhead "$overhead" || ! valid_mpu "$mpu"; then
+		log "invalid interface, rate or link compensation in /etc/config/cake_tiny"
+		return 1
+	fi
+	if [ ! -d "/sys/class/net/$wan" ]; then
+		log "interface $wan does not exist"
+		return 1
+	fi
+	if [ -f "$STATE" ]; then
+		read -r old_wan old_wan_idx old_ifb_idx <"$STATE"
+	fi
+	if [ -e "/sys/class/net/$IFB" ] &&
+		[ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" != "$old_ifb_idx" ]; then
+		log "$IFB already exists; refusing to modify it"
+		return 1
+	fi
+	if [ "$wan" != "$old_wan" ] ||
+		[ "$(cat "/sys/class/net/$wan/ifindex" 2>/dev/null)" != "$old_wan_idx" ]; then
+		check_wan_conflicts "$wan" || return 1
+	fi
+	cleanup
+
+	modprobe ifb 2>/dev/null
+	if ! ip link add "$IFB" type ifb; then
+		log "failed to create $IFB"
+		return 1
+	fi
+	# Remember device identities so cleanup cannot remove a recreated device.
+	wan_idx="$(cat "/sys/class/net/$wan/ifindex")"
+	ifb_idx="$(cat "/sys/class/net/$IFB/ifindex")"
+	if ! printf '%s %s %s\n' "$wan" "$wan_idx" "$ifb_idx" >"$STATE"; then
+		ip link del "$IFB" 2>/dev/null
+		log "failed to record qdisc ownership"
+		return 1
+	fi
+	if ! ip link set "$IFB" up ||
+		! tc qdisc replace dev "$wan" root cake bandwidth "${upload}Mbit" besteffort ethernet overhead "$overhead" mpu "$mpu" ||
+		! tc qdisc replace dev "$wan" handle ffff: ingress ||
+		! tc filter replace dev "$wan" parent ffff: protocol all matchall action mirred egress redirect dev "$IFB" ||
+		! tc qdisc replace dev "$IFB" root cake bandwidth "${download}Mbit" besteffort ingress ethernet overhead "$overhead" mpu "$mpu"; then
+		log "failed to install CAKE rules"
+		cleanup
+		return 1
+	fi
+	log "enabled: wan=$wan down=${download}Mbit up=${upload}Mbit overhead=$overhead mpu=$mpu"
+}
+
+stop_service() {
+	cleanup
+	log "stopped"
+}
+
+down() {
+	cleanup
+	log "WAN went down"
+}
+
+status_service() {
+	local active_wan active_wan_idx active_ifb_idx
+	[ -f "$STATE" ] || {
+		echo "CAKE Tiny is inactive"
+		return 1
+	}
+	read -r active_wan active_wan_idx active_ifb_idx <"$STATE"
+	if [ -n "$active_wan_idx" ] && [ -n "$active_ifb_idx" ] &&
+		[ "$(cat "/sys/class/net/$active_wan/ifindex" 2>/dev/null)" = "$active_wan_idx" ] &&
+		[ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" = "$active_ifb_idx" ] &&
+		tc qdisc show dev "$active_wan" 2>/dev/null | grep -Eq '^qdisc cake .* root ' &&
+		tc qdisc show dev "$IFB" 2>/dev/null | grep -Eq '^qdisc cake .* root ' &&
+		tc filter show dev "$active_wan" parent ffff: 2>/dev/null | grep -q matchall; then
+		echo "CAKE Tiny is active on $active_wan"
+		return 0
+	fi
+	echo "CAKE Tiny rules are incomplete"
+	return 1
+}
+
+reload_service() {
+	start_service
+}
+
+service_triggers() {
+	procd_add_reload_trigger cake_tiny
+}

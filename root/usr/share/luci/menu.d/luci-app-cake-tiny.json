@@ -1,0 +1,13 @@
+{
+	"admin/network/cake-tiny": {
+		"title": "CAKE Tiny",
+		"order": 61,
+		"action": {
+			"type": "view",
+			"path": "network/cake-tiny"
+		},
+		"depends": {
+			"acl": [ "luci-app-cake-tiny" ]
+		}
+	}
+}
