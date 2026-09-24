@@ -120,7 +120,7 @@ check_wan_conflicts() {
 }
 
 start_service() {
-	local enabled wan download upload overhead mpu old_wan old_wan_idx old_ifb_idx old_version wan_idx ifb_idx owned
+	local enabled wan download upload nat nat_mode overhead mpu old_wan old_wan_idx old_ifb_idx old_version wan_idx ifb_idx owned
 	config_load cake_tiny
 	config_get_bool enabled main enabled 0
 	if [ "$enabled" != 1 ]; then
@@ -130,6 +130,7 @@ start_service() {
 	config_get wan main wan eth0
 	config_get download main download 140
 	config_get upload main upload 30
+	config_get_bool nat main nat 1
 	config_get overhead main overhead 44
 	config_get mpu main mpu 84
 
@@ -138,6 +139,8 @@ start_service() {
 		log "invalid interface, rate or link compensation in /etc/config/cake_tiny"
 		return 1
 	fi
+	nat_mode=nonat
+	[ "$nat" = 1 ] && nat_mode=nat
 	if [ ! -d "/sys/class/net/$wan" ]; then
 		log "interface $wan does not exist"
 		return 1
@@ -176,15 +179,15 @@ start_service() {
 		return 1
 	fi
 	if ! ip link set "$IFB" up ||
-		! tc qdisc replace dev "$wan" root handle "$WAN_HANDLE" cake bandwidth "${upload}Mbit" besteffort ethernet overhead "$overhead" mpu "$mpu" ||
+		! tc qdisc replace dev "$wan" root handle "$WAN_HANDLE" cake bandwidth "${upload}Mbit" besteffort "$nat_mode" overhead "$overhead" mpu "$mpu" ||
 		! tc qdisc replace dev "$wan" handle ffff: ingress ||
 		! tc filter add dev "$wan" parent ffff: protocol all pref "$FILTER_PREF" handle 1 matchall action mirred egress redirect dev "$IFB" ||
-		! tc qdisc replace dev "$IFB" root handle "$IFB_HANDLE" cake bandwidth "${download}Mbit" besteffort ingress ethernet overhead "$overhead" mpu "$mpu"; then
+		! tc qdisc replace dev "$IFB" root handle "$IFB_HANDLE" cake bandwidth "${download}Mbit" besteffort ingress "$nat_mode" overhead "$overhead" mpu "$mpu"; then
 		log "failed to install CAKE rules"
 		cleanup
 		return 1
 	fi
-	log "enabled: wan=$wan down=${download}Mbit up=${upload}Mbit overhead=$overhead mpu=$mpu"
+	log "enabled: wan=$wan down=${download}Mbit up=${upload}Mbit nat=$nat_mode overhead=$overhead mpu=$mpu"
 }
 
 stop_service() {

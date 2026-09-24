@@ -56,10 +56,15 @@ return view.extend({
 		};
 		o.description = _('Set this to about 93–95% of your measured upload speed.');
 
+		o = s.option(form.Flag, 'nat', _('IPv4 NAT lookup'));
+		o.default = '1';
+		o.rmempty = false;
+		o.description = _('May improve fairness between LAN devices for directly forwarded IPv4 traffic. Proxy connections and IPv6 do not benefit.');
+
 		o = s.option(form.Value, 'overhead', _('Per-packet overhead (bytes)'));
 		o.default = '44';
 		o.rmempty = false;
-		o.description = _('Ethernet framing is enabled. Adjust the overhead for your FTTH encapsulation.');
+		o.description = _('Final CAKE overhead. The default of 44 bytes is an initial estimate for FTTH; adjust it for your link encapsulation and accounting.');
 		o.validate = function(section_id, value) {
 			return /^\d{1,3}$/.test(value) && Number(value) <= 256
 				? true : _('Enter an integer from 0 to 256.');
