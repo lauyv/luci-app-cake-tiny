@@ -14,7 +14,7 @@ return view.extend({
 	render: function(status) {
 		var m, s, o;
 
-		m = new form.Map('cake_tiny', _('CAKE Tiny'));
+		m = new form.Map('cake_tiny', 'CAKE Tiny');
 		m.description = _('Simple upload and download shaping with tc, IFB and CAKE. No sqm-scripts or traffic priority rules are used. Save & Apply updates the service.');
 
 		s = m.section(form.NamedSection, 'main', 'cake_tiny', _('Settings'));

@@ -5,9 +5,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-msgid "CAKE Tiny"
-msgstr "简易 CAKE 限速"
-
 msgid "Simple upload and download shaping with tc, IFB and CAKE. No sqm-scripts or traffic priority rules are used. Save & Apply updates the service."
 msgstr "使用 tc、IFB 和 CAKE 对上传、下载进行整形。不使用 sqm-scripts 或流量优先级规则。保存并应用后更新服务。"
 
