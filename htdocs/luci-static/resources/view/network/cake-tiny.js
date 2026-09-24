@@ -61,9 +61,15 @@ return view.extend({
 		o.rmempty = false;
 		o.description = _('May improve fairness between LAN devices for directly forwarded IPv4 traffic. Proxy connections and IPv6 do not benefit.');
 
+		o = s.option(form.Flag, 'link_compensation', _('Link-layer compensation'));
+		o.default = '1';
+		o.rmempty = false;
+		o.description = _('Apply the configured overhead and MPU. Disable to use the packet length reported by Linux.');
+
 		o = s.option(form.Value, 'overhead', _('Per-packet overhead (bytes)'));
 		o.default = '44';
 		o.rmempty = false;
+		o.depends('link_compensation', '1');
 		o.description = _('Final CAKE overhead. The default of 44 bytes is an initial estimate for FTTH; adjust it for your link encapsulation and accounting.');
 		o.validate = function(section_id, value) {
 			return /^\d{1,3}$/.test(value) && Number(value) <= 256
@@ -73,6 +79,7 @@ return view.extend({
 		o = s.option(form.Value, 'mpu', _('Minimum packet unit (bytes)'));
 		o.default = '84';
 		o.rmempty = false;
+		o.depends('link_compensation', '1');
 		o.validate = function(section_id, value) {
 			return /^\d{1,3}$/.test(value) && Number(value) <= 256
 				? true : _('Enter an integer from 0 to 256.');

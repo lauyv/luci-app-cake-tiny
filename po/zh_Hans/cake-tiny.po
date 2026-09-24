@@ -44,6 +44,12 @@ msgstr "IPv4 NAT 查询"
 msgid "May improve fairness between LAN devices for directly forwarded IPv4 traffic. Proxy connections and IPv6 do not benefit."
 msgstr "可改善直接转发的 IPv4 流量在内网设备之间的公平性；代理连接和 IPv6 流量不会因此受益。"
 
+msgid "Link-layer compensation"
+msgstr "链路层开销补偿"
+
+msgid "Apply the configured overhead and MPU. Disable to use the packet length reported by Linux."
+msgstr "开启后使用配置的每包开销和最小计费包长；关闭后按 Linux 报告的包长计费。"
+
 msgid "Per-packet overhead (bytes)"
 msgstr "每包额外开销（字节）"
 

@@ -120,7 +120,7 @@ check_wan_conflicts() {
 }
 
 start_service() {
-	local enabled wan download upload nat nat_mode overhead mpu old_wan old_wan_idx old_ifb_idx old_version wan_idx ifb_idx owned
+	local enabled wan download upload nat nat_mode link_compensation link_details overhead mpu old_wan old_wan_idx old_ifb_idx old_version wan_idx ifb_idx owned
 	config_load cake_tiny
 	config_get_bool enabled main enabled 0
 	if [ "$enabled" != 1 ]; then
@@ -131,13 +131,24 @@ start_service() {
 	config_get download main download 140
 	config_get upload main upload 30
 	config_get_bool nat main nat 1
+	config_get_bool link_compensation main link_compensation 1
 	config_get overhead main overhead 44
 	config_get mpu main mpu 84
 
-	if ! valid_device "$wan" || ! valid_rate "$download" || ! valid_rate "$upload" ||
-		! valid_overhead "$overhead" || ! valid_mpu "$mpu"; then
-		log "invalid interface, rate or link compensation in /etc/config/cake_tiny"
+	if ! valid_device "$wan" || ! valid_rate "$download" || ! valid_rate "$upload"; then
+		log "invalid interface or rate in /etc/config/cake_tiny"
 		return 1
+	fi
+	if [ "$link_compensation" = 1 ]; then
+		if ! valid_overhead "$overhead" || ! valid_mpu "$mpu"; then
+			log "invalid link compensation in /etc/config/cake_tiny"
+			return 1
+		fi
+		set -- overhead "$overhead" mpu "$mpu"
+		link_details="overhead=$overhead mpu=$mpu"
+	else
+		set -- raw
+		link_details=raw
 	fi
 	nat_mode=nonat
 	[ "$nat" = 1 ] && nat_mode=nat
@@ -179,15 +190,15 @@ start_service() {
 		return 1
 	fi
 	if ! ip link set "$IFB" up ||
-		! tc qdisc replace dev "$wan" root handle "$WAN_HANDLE" cake bandwidth "${upload}Mbit" besteffort "$nat_mode" overhead "$overhead" mpu "$mpu" ||
+		! tc qdisc replace dev "$wan" root handle "$WAN_HANDLE" cake bandwidth "${upload}Mbit" besteffort "$nat_mode" "$@" ||
 		! tc qdisc replace dev "$wan" handle ffff: ingress ||
 		! tc filter add dev "$wan" parent ffff: protocol all pref "$FILTER_PREF" handle 1 matchall action mirred egress redirect dev "$IFB" ||
-		! tc qdisc replace dev "$IFB" root handle "$IFB_HANDLE" cake bandwidth "${download}Mbit" besteffort ingress "$nat_mode" overhead "$overhead" mpu "$mpu"; then
+		! tc qdisc replace dev "$IFB" root handle "$IFB_HANDLE" cake bandwidth "${download}Mbit" besteffort ingress "$nat_mode" "$@"; then
 		log "failed to install CAKE rules"
 		cleanup
 		return 1
 	fi
-	log "enabled: wan=$wan down=${download}Mbit up=${upload}Mbit nat=$nat_mode overhead=$overhead mpu=$mpu"
+	log "enabled: wan=$wan down=${download}Mbit up=${upload}Mbit nat=$nat_mode link=$link_details"
 }
 
 stop_service() {
