@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_LICENSE:=MIT
-PKG_RELEASE:=5
+PKG_RELEASE:=6
 
 LUCI_TITLE:=Tiny CAKE shaper (tc + IFB)
 LUCI_DESCRIPTION:=Minimal CAKE upload and download shaping without sqm-scripts

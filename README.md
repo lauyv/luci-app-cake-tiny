@@ -2,7 +2,7 @@
 
 适用于 ImmortalWrt / OpenWrt 25.12 的简易 CAKE 整形页面。它在物理 WAN 网卡上用 `tc` 和 CAKE 控制上传，并把该网卡的入站流量重定向到 IFB 控制下载。不依赖 `sqm-scripts`。
 
-本项目只使用普通 `cake` qdisc：上传和下载都采用 `besteffort`，下载侧启用 CAKE 的 `ingress` 模式。它不配置 DiffServ 优先级、NAT 主机隔离或自定义 UDP 规则。
+本项目只使用普通 `cake` qdisc：上传和下载都采用 `besteffort`，下载侧启用 CAKE 的 `ingress` 模式。默认开启 IPv4 NAT 查询，以改善直连流量的主机公平性；不配置 DiffServ 优先级或自定义 UDP 规则。
 
 ## 快速设置
 
@@ -10,20 +10,22 @@
 
 1. 选择连接上级设备的**物理 WAN 设备**。`eth0` 只是默认值，请以路由器的实际网口分配为准。
 2. 分别填写下载和上传限速，单位为 **Mbps**。建议先取未启用整形时有线实测稳定速率的约 90%～95%，再根据满载时的延迟调整。
-3. 根据实际链路设置每包开销和最小包长；不确定时可先使用默认值，观察效果后再调整。
-4. 勾选**启用**。默认配置中的 `enabled=0`，安装后不会立即接管 WAN 队列。
+3. 根据实际链路设置每包开销和最小包长；物理以太网 WAN 可先使用默认的 `38/84`。
+4. **IPv4 NAT 查询**默认开启。若不需要，可在页面中关闭。
+5. 勾选**启用**。默认配置中的 `enabled=0`，安装后不会立即接管 WAN 队列。
 
 默认配置位于 `/etc/config/cake_tiny`：
 
-| 选项       | 默认值 | 含义                          |
-| ---------- | -----: | ----------------------------- |
-| `wan`      | `eth0` | 被整形的物理 WAN 设备         |
-| `download` |  `140` | 下载限速，Mbps                |
-| `upload`   |   `30` | 上传限速，Mbps                |
-| `overhead` |   `44` | CAKE 最终使用的每包开销，字节 |
-| `mpu`      |   `84` | CAKE 最终使用的最小包长，字节 |
+| 选项       | 默认值 | 含义                              |
+| ---------- | -----: | --------------------------------- |
+| `wan`      | `eth0` | 被整形的物理 WAN 设备             |
+| `download` |  `140` | 下载限速，Mbps                    |
+| `upload`   |   `30` | 上传限速，Mbps                    |
+| `nat`      |    `1` | 是否启用 CAKE 的 IPv4 NAT 查询    |
+| `overhead` |   `38` | CAKE 最终使用的每包开销，字节     |
+| `mpu`      |   `84` | CAKE 最终使用的最小计费包长，字节 |
 
-这些速率只是初始值，并不代表线路测速结果。例如实测**下载 30、上传 140 Mbps** 时，可以先试下载 `27`、上传 `130`；满载延迟稳定后再逐步提高。升级软件包会保留现有的 UCI 配置，不会自动把已有速率改成新的默认值。
+这些速率只是初始值，并不代表线路测速结果。例如实测**下载 30、上传 140 Mbps** 时，可以先试下载 `27`、上传 `130`；满载延迟稳定后再逐步提高。升级软件包会保留现有的 UCI 配置，不会自动改变已有的速率或 `overhead=44`。旧配置若没有 `nat` 选项，服务会按默认值 `1` 开启 NAT 查询；已有的 `nat=0` 则保持关闭。
 
 ### 常见 WAN 接入方式
 
@@ -33,13 +35,13 @@
 | 上级设备桥接，本机通过 PPPoE 拨号 | 承载 PPPoE 的物理网卡        | 本项目的规则装在所选网卡上，而不是 `pppoe-wan`。             |
 | 本机 PPPoE 拨号并使用 VLAN        | 通常仍选承载 VLAN 的物理网卡 | 先确认网络配置中的上联设备及标签是否已计入该设备看到的包长。 |
 
-sing-box 的 TUN、`auto_route` 和 `auto_redirect` 可以与本项目同时使用。CAKE 整形最终经过所选物理 WAN 的流量；代理后的连接不能保证按原始内网设备公平分配。使用 CAKE 时建议关闭硬件流量卸载；若统计计数不随负载增长，也要检查软件流量卸载和实际流量路径。
+sing-box 的 TUN、`auto_route` 和 `auto_redirect` 可以与本项目同时使用。CAKE 整形最终经过所选物理 WAN 的流量。`nat=1` 会在上传和下载 CAKE 上查询 IPv4 NAT 连接，可能改善经内核直接转发的多设备流量公平性；sing-box 代理或 `direct` 出站重新发起的连接无法借此还原原始内网设备，IPv6 也不依赖此查询。若使用 `auto_redirect` 的内核级 `bypass` 放行直连 IPv4，且本机执行 NAT，这个选项才更可能有用。物理 WAN 承载 PPPoE 时，CAKE 在此处看到的 PPPoE 帧通常无法进行 IPv4 NAT 查询。使用 CAKE 时建议关闭硬件流量卸载；若统计计数不随负载增长，也要检查软件流量卸载和实际流量路径。
 
 ### 开销参数的实际含义
 
-服务执行的命令包含 `ethernet overhead <数值> mpu <数值>`。在 `tc` 中，后面的 `overhead` 和 `mpu` 会覆盖 `ethernet` 预设的值，**不会与预设值相加**。因此默认命令最终使用的是 **overhead 44、MPU 84**，不是 overhead 82。
+服务执行的命令直接使用 `overhead <数值> mpu <数值>`，默认最终值是 **overhead 38、MPU 84**。CAKE 会根据其看到的网络层偏移计算计费包长，再应用这两个值；`overhead` 是最终补偿值，不是额外叠加在 `ethernet` 预设上的数字。
 
-`ethernet` 单独使用相当于 `overhead 38 mpu 84`。上级设备拨号、本机拨号和带 VLAN 的线路不能简单按“0、8、12 字节”替换本页面的开销值，因为整形位置是物理 WAN，部分封装头可能已经计入该位置看到的包长。`44/84` 是一个初始设置，不是所有 FTTH 线路的精确值。具体计算见 [CAKE 手册](https://man7.org/linux/man-pages/man8/tc-cake.8.html)和 [iproute2 的参数解析](https://github.com/iproute2/iproute2/blob/main/tc/q_cake.c)。
+`38/84` 等同于 CAKE 的 `ethernet` 预设，可作为物理以太网 WAN 的起点。若 PPPoE 帧在所选物理网卡上已经包含拨号封装，就不应再机械地加 8 字节；VLAN 标签也只在未被 CAKE 计入时才需要额外补偿 4 字节。这里的 `38/84` 不是所有 FTTH 线路的精确值。尤其不要将 `0/8/12` 填入本页面并以为它们会叠加到 Ethernet 补偿上。具体计算见 [CAKE 手册](https://man7.org/linux/man-pages/man8/tc-cake.8.html)、[iproute2 的参数解析](https://github.com/iproute2/iproute2/blob/main/tc/q_cake.c)和 [CAKE 内核计费代码](https://github.com/torvalds/linux/blob/master/net/sched/sch_cake.c)。
 
 ## 安装
 

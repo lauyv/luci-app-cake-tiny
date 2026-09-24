@@ -38,11 +38,17 @@ msgstr "建议设为实测上传速率的约 93–95%。"
 msgid "Current tc statistics"
 msgstr "当前 tc 统计"
 
+msgid "IPv4 NAT lookup"
+msgstr "IPv4 NAT 查询"
+
+msgid "May improve fairness between LAN devices for directly forwarded IPv4 traffic. Proxy connections and IPv6 do not benefit."
+msgstr "可改善直接转发的 IPv4 流量在内网设备之间的公平性；代理连接和 IPv6 流量不会因此受益。"
+
 msgid "Per-packet overhead (bytes)"
 msgstr "每包额外开销（字节）"
 
-msgid "Ethernet framing is enabled. Adjust the overhead for your FTTH encapsulation."
-msgstr "已启用以太网帧补偿。请根据实际 FTTH 封装方式调整额外开销。"
+msgid "Final CAKE overhead. Start with 38 bytes for a physical Ethernet WAN; do not automatically add PPPoE bytes."
+msgstr "CAKE 最终使用的开销。物理以太网 WAN 可从 38 字节开始；不要直接叠加 PPPoE 字节数。"
 
 msgid "Minimum packet unit (bytes)"
 msgstr "最小计费包长（字节）"
