@@ -7,7 +7,7 @@ case "$WAN" in
 esac
 
 if [ -f /var/run/cake-tiny.wan ]; then
-	read -r ACTIVE_WAN WAN_IDX IFB_IDX </var/run/cake-tiny.wan
+	read -r ACTIVE_WAN WAN_IDX IFB_IDX STATE_VERSION </var/run/cake-tiny.wan
 	printf 'CAKE Tiny: configured on %s\n\n' "$ACTIVE_WAN"
 else
 	printf 'CAKE Tiny: inactive\n\n'

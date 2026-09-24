@@ -9,9 +9,21 @@ EXTRA_HELP="down             Remove rules while retaining config reload triggers
 
 IFB=ifb-cake
 STATE=/var/run/cake-tiny.wan
+WAN_HANDLE=1ca:
+IFB_HANDLE=1cb:
+FILTER_PREF=49152
 
 log() {
 	logger -t cake-tiny "$*"
+}
+
+legacy_rules_owned() {
+	[ -n "$old_ifb_idx" ] &&
+		[ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" = "$old_ifb_idx" ] &&
+		tc qdisc show dev "$old_wan" 2>/dev/null | grep -Eq '^qdisc cake .* root ' &&
+		tc qdisc show dev "$IFB" 2>/dev/null | grep -Eq '^qdisc cake .* root ' &&
+		tc filter show dev "$old_wan" parent ffff: 2>/dev/null |
+			grep -Fq "Egress Redirect to device $IFB"
 }
 
 valid_rate() {
@@ -32,28 +44,73 @@ valid_mpu() {
 }
 
 cleanup() {
+	local filters qdiscs legacy=0 legacy_ifb=0
 	[ -f "$STATE" ] || return 0
-	read -r old_wan old_wan_idx old_ifb_idx <"$STATE"
+	read -r old_wan old_wan_idx old_ifb_idx old_version <"$STATE"
+	if [ -z "$old_version" ] && [ -n "$old_ifb_idx" ] &&
+		[ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" = "$old_ifb_idx" ] &&
+		tc qdisc show dev "$IFB" 2>/dev/null | grep -Eq '^qdisc cake .* root '; then
+		legacy_ifb=1
+	fi
 	if valid_device "$old_wan" && [ -n "$old_wan_idx" ] &&
 		[ "$(cat "/sys/class/net/$old_wan/ifindex" 2>/dev/null)" = "$old_wan_idx" ]; then
-		tc qdisc del dev "$old_wan" ingress 2>/dev/null
-		tc qdisc del dev "$old_wan" root 2>/dev/null
+		[ -z "$old_version" ] && legacy_rules_owned && legacy=1
+		if [ -n "$old_ifb_idx" ] &&
+			[ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" = "$old_ifb_idx" ]; then
+			if [ "$legacy" = 1 ]; then
+				tc qdisc del dev "$old_wan" ingress 2>/dev/null
+			elif tc filter show dev "$old_wan" parent ffff: pref "$FILTER_PREF" 2>/dev/null |
+				grep -Fq "Egress Redirect to device $IFB"; then
+				tc filter del dev "$old_wan" parent ffff: protocol all pref "$FILTER_PREF" handle 1 matchall 2>/dev/null
+			fi
+			if [ "$legacy" != 1 ]; then
+				filters="$(tc filter show dev "$old_wan" parent ffff: 2>/dev/null)"
+				if [ -z "$filters" ] && tc qdisc show dev "$old_wan" 2>/dev/null |
+					grep -Eq '^qdisc ingress ffff: parent ffff:fff1'; then
+					tc qdisc del dev "$old_wan" ingress 2>/dev/null
+				fi
+			fi
+		fi
+		if [ "$legacy" = 1 ]; then
+			tc qdisc del dev "$old_wan" root 2>/dev/null
+		elif tc qdisc show dev "$old_wan" 2>/dev/null |
+			grep -Eq "^qdisc cake $WAN_HANDLE root "; then
+			tc qdisc del dev "$old_wan" root 2>/dev/null
+		fi
 	fi
 	if [ -n "$old_ifb_idx" ] &&
 		[ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" = "$old_ifb_idx" ]; then
-		tc qdisc del dev "$IFB" root 2>/dev/null
-		ip link set "$IFB" down 2>/dev/null
-		ip link del "$IFB" 2>/dev/null
+		qdiscs="$(tc qdisc show dev "$IFB" 2>/dev/null)"
+		if [ "$legacy_ifb" = 1 ] || printf '%s\n' "$qdiscs" |
+			grep -Eq "^qdisc (cake $IFB_HANDLE|noqueue 0:|noop 0:|fq_codel 0:|pfifo_fast 0:) root "; then
+			tc qdisc del dev "$IFB" root 2>/dev/null
+			ip link set "$IFB" down 2>/dev/null
+			ip link del "$IFB" 2>/dev/null
+		fi
 	fi
 	rm -f "$STATE"
 }
 
 check_wan_conflicts() {
-	local qdiscs
+	local qdiscs filters owned="$2"
 	qdiscs="$(tc qdisc show dev "$1")" || return 1
 	if printf '%s\n' "$qdiscs" | grep -Eq '^qdisc (ingress|clsact) '; then
-		log "$1 already has an ingress/clsact qdisc"
-		return 1
+		filters="$(tc filter show dev "$1" parent ffff: 2>/dev/null)"
+		if [ "$owned" != 1 ] || printf '%s\n' "$qdiscs" | grep -Eq '^qdisc clsact '; then
+			log "$1 already has an ingress/clsact qdisc"
+			return 1
+		fi
+		if [ -n "$filters" ] &&
+			{ ! tc filter show dev "$1" parent ffff: pref "$FILTER_PREF" 2>/dev/null |
+				grep -Fq "Egress Redirect to device $IFB" ||
+				printf '%s\n' "$filters" | grep -E '^filter parent ' |
+					grep -Ev "^filter parent ffff: protocol all pref $FILTER_PREF matchall " | grep -q .; }; then
+			log "$1 already has an ingress/clsact qdisc"
+			return 1
+		fi
+	fi
+	if [ "$owned" = 1 ]; then
+		qdiscs="$(printf '%s\n' "$qdiscs" | grep -Ev "^qdisc cake $WAN_HANDLE root ")"
 	fi
 	if printf '%s\n' "$qdiscs" | grep -E '^qdisc .* root ' |
 		grep -Ev '^qdisc (mq|noqueue|fq_codel|pfifo_fast) 0: root ' | grep -q .; then
@@ -63,7 +120,7 @@ check_wan_conflicts() {
 }
 
 start_service() {
-	local enabled wan download upload overhead mpu old_wan old_wan_idx old_ifb_idx wan_idx ifb_idx
+	local enabled wan download upload overhead mpu old_wan old_wan_idx old_ifb_idx old_version wan_idx ifb_idx owned
 	config_load cake_tiny
 	config_get_bool enabled main enabled 0
 	if [ "$enabled" != 1 ]; then
@@ -86,17 +143,23 @@ start_service() {
 		return 1
 	fi
 	if [ -f "$STATE" ]; then
-		read -r old_wan old_wan_idx old_ifb_idx <"$STATE"
+		read -r old_wan old_wan_idx old_ifb_idx old_version <"$STATE"
 	fi
 	if [ -e "/sys/class/net/$IFB" ] &&
 		[ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" != "$old_ifb_idx" ]; then
 		log "$IFB already exists; refusing to modify it"
 		return 1
 	fi
-	if [ "$wan" != "$old_wan" ] ||
-		[ "$(cat "/sys/class/net/$wan/ifindex" 2>/dev/null)" != "$old_wan_idx" ]; then
-		check_wan_conflicts "$wan" || return 1
+	owned=0
+	if [ "$wan" = "$old_wan" ] &&
+		[ "$(cat "/sys/class/net/$wan/ifindex" 2>/dev/null)" = "$old_wan_idx" ]; then
+		owned=1
 	fi
+	if [ "$owned" = 1 ] && [ -z "$old_version" ] && legacy_rules_owned; then
+		cleanup
+		owned=0
+	fi
+	check_wan_conflicts "$wan" "$owned" || return 1
 	cleanup
 
 	modprobe ifb 2>/dev/null
@@ -107,16 +170,16 @@ start_service() {
 	# Remember device identities so cleanup cannot remove a recreated device.
 	wan_idx="$(cat "/sys/class/net/$wan/ifindex")"
 	ifb_idx="$(cat "/sys/class/net/$IFB/ifindex")"
-	if ! printf '%s %s %s\n' "$wan" "$wan_idx" "$ifb_idx" >"$STATE"; then
+	if ! printf '%s %s %s 2\n' "$wan" "$wan_idx" "$ifb_idx" >"$STATE"; then
 		ip link del "$IFB" 2>/dev/null
 		log "failed to record qdisc ownership"
 		return 1
 	fi
 	if ! ip link set "$IFB" up ||
-		! tc qdisc replace dev "$wan" root cake bandwidth "${upload}Mbit" besteffort ethernet overhead "$overhead" mpu "$mpu" ||
+		! tc qdisc replace dev "$wan" root handle "$WAN_HANDLE" cake bandwidth "${upload}Mbit" besteffort ethernet overhead "$overhead" mpu "$mpu" ||
 		! tc qdisc replace dev "$wan" handle ffff: ingress ||
-		! tc filter replace dev "$wan" parent ffff: protocol all matchall action mirred egress redirect dev "$IFB" ||
-		! tc qdisc replace dev "$IFB" root cake bandwidth "${download}Mbit" besteffort ingress ethernet overhead "$overhead" mpu "$mpu"; then
+		! tc filter add dev "$wan" parent ffff: protocol all pref "$FILTER_PREF" handle 1 matchall action mirred egress redirect dev "$IFB" ||
+		! tc qdisc replace dev "$IFB" root handle "$IFB_HANDLE" cake bandwidth "${download}Mbit" besteffort ingress ethernet overhead "$overhead" mpu "$mpu"; then
 		log "failed to install CAKE rules"
 		cleanup
 		return 1
@@ -130,23 +193,25 @@ stop_service() {
 }
 
 down() {
+	procd_lock
 	cleanup
 	log "WAN went down"
 }
 
 status_service() {
-	local active_wan active_wan_idx active_ifb_idx
+	local active_wan active_wan_idx active_ifb_idx active_version
 	[ -f "$STATE" ] || {
 		echo "CAKE Tiny is inactive"
 		return 1
 	}
-	read -r active_wan active_wan_idx active_ifb_idx <"$STATE"
+	read -r active_wan active_wan_idx active_ifb_idx active_version <"$STATE"
 	if [ -n "$active_wan_idx" ] && [ -n "$active_ifb_idx" ] &&
 		[ "$(cat "/sys/class/net/$active_wan/ifindex" 2>/dev/null)" = "$active_wan_idx" ] &&
 		[ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" = "$active_ifb_idx" ] &&
-		tc qdisc show dev "$active_wan" 2>/dev/null | grep -Eq '^qdisc cake .* root ' &&
-		tc qdisc show dev "$IFB" 2>/dev/null | grep -Eq '^qdisc cake .* root ' &&
-		tc filter show dev "$active_wan" parent ffff: 2>/dev/null | grep -q matchall; then
+		tc qdisc show dev "$active_wan" 2>/dev/null | grep -Eq "^qdisc cake $WAN_HANDLE root " &&
+		tc qdisc show dev "$IFB" 2>/dev/null | grep -Eq "^qdisc cake $IFB_HANDLE root " &&
+		tc filter show dev "$active_wan" parent ffff: pref "$FILTER_PREF" 2>/dev/null |
+			grep -Fq "Egress Redirect to device $IFB"; then
 		echo "CAKE Tiny is active on $active_wan"
 		return 0
 	fi
