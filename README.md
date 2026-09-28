@@ -2,7 +2,7 @@
 
 适用于 ImmortalWrt / OpenWrt 25.12 的简易 CAKE 整形页面。它在物理 WAN 网卡上用 `tc` 和 CAKE 控制上传，并把该网卡的入站流量重定向到 IFB 控制下载。不依赖 `sqm-scripts`。
 
-本项目只使用普通 `cake` qdisc：上传和下载都采用 `besteffort`，下载侧启用 CAKE 的 `ingress` 模式。默认开启 IPv4 NAT 查询，以改善直连流量的主机公平性；不配置 DiffServ 优先级或自定义 UDP 规则。
+本项目只使用普通 `cake` qdisc：上传和下载都采用 `besteffort`，上传使用 `dual-srchost`，下载使用 `dual-dsthost ingress`。默认开启 IPv4 NAT 查询，以改善直连流量的主机公平性；不配置 DiffServ 优先级或自定义 UDP 规则。
 
 ## 快速设置
 
@@ -10,21 +10,23 @@
 
 1. 选择连接上级设备的**物理 WAN 设备**。`eth0` 只是默认值，请以路由器的实际网口分配为准。
 2. 分别填写下载和上传限速，单位为 **Mbps**。建议先取未启用整形时有线实测稳定速率的约 90%～95%，再根据满载时的延迟调整。
-3. **链路层开销补偿**默认开启，可按实际链路设置每包开销和最小包长；关闭后使用 Linux 报告的包长。
+3. 按实际线路选择**链路层计费**预设。默认的 `raw` 使用 Linux 报告的包长；FTTH 封装未知时可从 `44/84` 预设开始测试。
 4. **IPv4 NAT 查询**默认开启。若不需要，可在页面中关闭。
 5. 勾选**启用**。默认配置中的 `enabled=0`，安装后不会立即接管 WAN 队列。
 
 默认配置位于 `/etc/config/cake_tiny`：
 
-| 选项                | 默认值 | 含义                              |
-| ------------------- | -----: | --------------------------------- |
-| `wan`               | `eth0` | 被整形的物理 WAN 设备             |
-| `download`          |  `140` | 下载限速，Mbps                    |
-| `upload`            |   `30` | 上传限速，Mbps                    |
-| `nat`               |    `1` | 是否启用 CAKE 的 IPv4 NAT 查询    |
-| `link_compensation` |    `0` | 是否启用链路层开销补偿            |
-| `overhead`          |   `44` | CAKE 最终使用的每包开销，字节     |
-| `mpu`               |   `84` | CAKE 最终使用的最小计费包长，字节 |
+| 选项           | 默认值 | 含义                           |
+| -------------- | -----: | ------------------------------ |
+| `wan`          | `eth0` | 被整形的物理 WAN 设备          |
+| `download`     |  `140` | 下载限速，Mbps                 |
+| `upload`       |   `30` | 上传限速，Mbps                 |
+| `nat`          |    `1` | 是否启用 CAKE 的 IPv4 NAT 查询 |
+| `link_profile` |  `raw` | 链路层计费预设                 |
+| `overhead`     |   `44` | 自定义预设的每包开销，字节     |
+| `mpu`          |   `84` | 自定义预设的最小计费包长，字节 |
+
+从旧版本升级时，如果配置中没有 `link_profile`，服务会继续读取原有的 `link_compensation`：开启对应自定义 `overhead/mpu`，关闭对应 `raw`。在 LuCI 中再次保存后会写入新的预设选项。
 
 这些速率只是初始值，并不代表线路测速结果。例如实测**下载 100 Mbps、上传 20 Mbps** 时，可以先试下载 `95`、上传 `19`；满载延迟稳定后再逐步提高。
 
@@ -38,47 +40,30 @@
 
 sing-box 的 TUN、`auto_route` 和 `auto_redirect` 可以与本项目同时使用。CAKE 整形最终经过所选物理 WAN 的流量。`nat=1` 会在上传和下载 CAKE 上查询 IPv4 NAT 连接，可能改善经内核直接转发的多设备流量公平性；sing-box 代理或 `direct` 出站重新发起的连接无法借此还原原始内网设备，IPv6 也不依赖此查询。若使用 `auto_redirect` 的内核级 `bypass` 放行直连 IPv4，且本机执行 NAT，这个选项才更可能有用。物理 WAN 承载 PPPoE 时，CAKE 在此处看到的 PPPoE 帧通常无法进行 IPv4 NAT 查询。使用 CAKE 时建议关闭硬件流量卸载；若统计计数不随负载增长，也要检查软件流量卸载和实际流量路径。
 
-### 开销参数的实际含义
+### 链路层计费
 
-启用链路层开销补偿时，服务使用 `overhead <数值> mpu <数值>`，当前默认值为 **overhead 44、MPU 84**，上传和下载共用这组参数。`overhead` 是每包补偿，`mpu` 是补偿后的最小计费长度。关闭时，服务向 CAKE 传入 `raw`，不传入 `overhead` 和 `mpu`；LuCI 隐藏这两个输入框，保存后会删除原值。重新开启时使用默认的 `44/84`，可再调整。`raw` 按 Linux 报告的包长计费，这个包长不一定等于纯 IP 包长。
-
-本项目不启用 ATM/PTM 补偿。开启补偿时，计费关系可理解为：
+链路层计费用于让 CAKE 按实际链路占用而不是单纯按 Linux 报告的包长整形。`overhead` 是每包补偿，`mpu` 是补偿后的最小计费长度；除 `raw` 外，计费关系可理解为：
 
 ```text
 计费长度 = max(CAKE 的基础包长 + overhead, mpu)
 ```
 
-CAKE 会先按 `skb_network_offset` 扣除基础包长之前的头部。是否需要补偿某种封装，取决于它是否仍被计入基础包长；仅凭抓包里看到了头部，不能判断是否需要补偿。实现见 [CAKE 内核计费代码](https://github.com/torvalds/linux/blob/v6.12/net/sched/sch_cake.c#L1218)。
-
-### 不同拨号方式的参考值
+上传和下载共用同一预设。CAKE 会先按 `skb_network_offset` 扣除基础包长之前的头部，因此是否需要补偿某种封装，取决于它是否仍被计入基础包长；仅凭抓包里看到了头部，不能判断是否需要补偿。实现见 [CAKE 内核计费代码](https://github.com/torvalds/linux/blob/v6.12/net/sched/sch_cake.c#L1218)。
 
 先以普通千兆以太网为基础计算。根据 [Linux tc-cake 手册](https://man7.org/linux/man-pages/man8/tc-cake.8.html)，完整以太网传输开销包含 14 字节 MAC 帧头、4 字节 FCS、8 字节前导码及帧起始定界符，以及 12 字节帧间隙的等效长度，共 **38 字节**。PPPoE/PPP 额外增加 **8 字节**，每层 VLAN 标签再增加 **4 字节**。
 
-以下数字表示**以 IP 包长为基础、按完整以太网线上长度计算**的参考值，并不等于所有 PON 线路的精确开销。精确设置还取决于运营商的计费方式，以及上传和下载整形位置已计入的封装，需避免重复补偿。
+当前项目只内置以下选项：
 
-| 封装方式       |       Overhead | MPU |
-| -------------- | -------------: | --: |
-| DHCP，无 VLAN  |             38 |  84 |
-| DHCP，单 VLAN  |             42 |  84 |
-| PPPoE，无 VLAN |             46 |  84 |
-| PPPoE，单 VLAN |             50 |  84 |
-| PPPoE，双 VLAN |             54 |  84 |
-| FTTH 封装未知  | 44（通用起点） |  84 |
+| 界面选项         | 传给 CAKE 的参数     | 说明                                                |
+| ---------------- | -------------------- | --------------------------------------------------- |
+| 无（原始包长）   | `raw`                | 默认选项，直接按 Linux 报告的包长计费               |
+| Ethernet         | `overhead 38 mpu 84` | 普通以太网参考值，例如 DHCP 且无 VLAN               |
+| FTTH，封装未知   | `overhead 44 mpu 84` | PON 封装和运营商计费方式未知时的保守起点            |
+| PPPoE，无 VLAN   | `overhead 46 mpu 84` | 以 IP 包长为基础，加完整以太网和 PPPoE/PPP 开销     |
+| PPPoE，单层 VLAN | `overhead 50 mpu 84` | 在无 VLAN PPPoE 基础上再计入一个 4 字节 VLAN 标签   |
+| 自定义           | 用户填写             | 仅此选项显示 `overhead` 和 `mpu` 输入框             |
 
-最小以太网帧 64 字节，加上前导码和帧间隙的占用，对应 MPU 84。`18/64` 则是 CAKE 的 DOCSIS 预设，不能仅因为使用网线就选 MPU 64。[预设定义](https://github.com/iproute2/iproute2/blob/main/man/man8/tc-cake.8#L321)
-
-这也解释了为什么 **44 并不是所有 PPPoE 光纤线路的精确值**：以 IP 包长为基础、按完整以太网线上长度计算时，即使没有 VLAN，PPPoE 的参考开销也已经达到 **46 字节**。表中的 `44/84` 是封装未知时的经验起点，不是上述封装公式的计算结果，也不是开销上限。[SQM 维护者说明](https://lists.openwrt.org/pipermail/openwrt-devel/2022-November/039814.html)
-
-CAKE 还提供以下链路预设，参数定义见 [CAKE 手册](https://man7.org/linux/man-pages/man8/tc-cake.8.html)：
-
-| 预设        | 等效参数                   | 适用场景                          |
-| ----------- | -------------------------- | --------------------------------- |
-| `ethernet`  | `overhead 38 mpu 84 noatm` | 按完整以太网线上长度计费          |
-| `pppoe-ptm` | `overhead 30 ptm`          | 经 PTM 承载的 PPPoE，常见于 VDSL2 |
-| `docsis`    | `overhead 18 mpu 64 noatm` | 有线电视宽带的 DOCSIS 计费方式    |
-| `raw`       | 不启用开销补偿             | 按 Linux 报告的包长计费           |
-
-仅使用 PPPoE 拨号不代表适合 `pppoe-ptm`。本项目开启补偿时手动传入 `overhead` 和 `mpu`，默认 `44/84`；关闭时使用 `raw`，不会自动选择其他预设。
+MPU 84 来自最小以太网帧 64 字节再加前导码和帧间隙占用。FTTH 的 `44/84` 是封装未知时的经验起点，不是所有光纤线路的精确值；若整形位置看到的包长已经包含部分封装，应避免重复补偿。本项目不启用 ATM/PTM 补偿。
 
 ## 安装
 
