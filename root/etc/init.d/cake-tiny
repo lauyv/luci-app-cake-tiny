@@ -131,7 +131,7 @@ start_service() {
 	config_get download main download 140
 	config_get upload main upload 30
 	config_get_bool nat main nat 1
-	config_get_bool link_compensation main link_compensation 1
+	config_get_bool link_compensation main link_compensation 0
 	config_get overhead main overhead 44
 	config_get mpu main mpu 84
 

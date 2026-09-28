@@ -22,7 +22,7 @@
 | `download`          |  `140` | 下载限速，Mbps                    |
 | `upload`            |   `30` | 上传限速，Mbps                    |
 | `nat`               |    `1` | 是否启用 CAKE 的 IPv4 NAT 查询    |
-| `link_compensation` |    `1` | 是否启用链路层开销补偿            |
+| `link_compensation` |    `0` | 是否启用链路层开销补偿            |
 | `overhead`          |   `44` | CAKE 最终使用的每包开销，字节     |
 | `mpu`               |   `84` | CAKE 最终使用的最小计费包长，字节 |
 

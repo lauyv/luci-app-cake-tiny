@@ -62,7 +62,7 @@ return view.extend({
 		o.description = _('May improve fairness between LAN devices for directly forwarded IPv4 traffic. Proxy connections and IPv6 do not benefit.');
 
 		o = s.option(form.Flag, 'link_compensation', _('Link-layer compensation'));
-		o.default = '1';
+		o.default = '0';
 		o.rmempty = false;
 		o.description = _('Apply the configured overhead and MPU. Disable to use the packet length reported by Linux.');
 
