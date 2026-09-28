@@ -59,18 +59,33 @@ return view.extend({
 		o = s.option(form.Flag, 'nat', _('IPv4 NAT lookup'));
 		o.default = '1';
 		o.rmempty = false;
-		o.description = _('May improve fairness between LAN devices for directly forwarded IPv4 traffic. Proxy connections and IPv6 do not benefit.');
+		o.description = _('Upload uses source-host fairness and download uses destination-host fairness. NAT lookup lets directly forwarded IPv4 traffic be assigned to the original LAN device; proxy connections and IPv6 do not benefit.');
 
-		o = s.option(form.Flag, 'link_compensation', _('Link-layer compensation'));
-		o.default = '0';
+		o = s.option(form.ListValue, 'link_profile', _('Link-layer accounting'));
+		o.value('raw', _('None (raw packet length)'));
+		o.value('ethernet', _('Ethernet (38/84)'));
+		o.value('ftth', _('FTTH, unknown encapsulation (44/84)'));
+		o.value('pppoe', _('PPPoE, no VLAN (46/84)'));
+		o.value('pppoe_vlan', _('PPPoE, single VLAN (50/84)'));
+		o.value('custom', _('Custom'));
+		o.default = 'raw';
 		o.rmempty = false;
-		o.description = _('Apply the configured overhead and MPU. Disable to use the packet length reported by Linux.');
+		o.description = _('Choose how CAKE accounts for framing overhead. The FTTH preset is a conservative starting point when the provider encapsulation is unknown.');
+		o.cfgvalue = function(section_id) {
+			var profile = this.map.data.get('cake_tiny', section_id, 'link_profile');
+
+			if (profile)
+				return profile;
+
+			return this.map.data.get('cake_tiny', section_id, 'link_compensation') === '1'
+				? 'custom' : 'raw';
+		};
 
 		o = s.option(form.Value, 'overhead', _('Per-packet overhead (bytes)'));
 		o.default = '44';
 		o.rmempty = false;
-		o.depends('link_compensation', '1');
-		o.description = _('Final CAKE overhead. The default of 44 bytes is an initial estimate for FTTH; adjust it for your link encapsulation and accounting.');
+		o.depends('link_profile', 'custom');
+		o.description = _('Final CAKE overhead for the custom profile.');
 		o.validate = function(section_id, value) {
 			return /^\d{1,3}$/.test(value) && Number(value) <= 256
 				? true : _('Enter an integer from 0 to 256.');
@@ -79,7 +94,7 @@ return view.extend({
 		o = s.option(form.Value, 'mpu', _('Minimum packet unit (bytes)'));
 		o.default = '84';
 		o.rmempty = false;
-		o.depends('link_compensation', '1');
+		o.depends('link_profile', 'custom');
 		o.validate = function(section_id, value) {
 			return /^\d{1,3}$/.test(value) && Number(value) <= 256
 				? true : _('Enter an integer from 0 to 256.');
