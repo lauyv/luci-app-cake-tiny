@@ -30,6 +30,26 @@
 
 这些速率只是初始值，并不代表线路测速结果。例如实测**下载 100 Mbps、上传 20 Mbps** 时，可以先试下载 `95`、上传 `19`；满载延迟稳定后再逐步提高。
 
+### 与代理软件共存
+
+#### sing-box
+
+sing-box 的 TUN、`auto_route` 和 `auto_redirect` 可以与本项目同时使用，两者不会争用物理 WAN 上的 CAKE 和 ingress qdisc。只要代理流量最终经过所选物理 WAN，仍会受到总带宽整形和队列延迟控制。
+
+`nat=1` 可以通过连接跟踪恢复经内核直接转发的 IPv4 客户端地址，使 `dual-srchost` 和 `dual-dsthost` 按内网设备分配带宽。由 sing-box 代理或 `direct` 出站重新发起的连接在 WAN 上表现为路由器本机连接，CAKE 无法借此还原原始客户端；使用 `auto_redirect` 的内核级 `bypass` 放行直连 IPv4 且本机执行 NAT 时，主机公平性更可能生效。IPv6 的主机识别不依赖 NAT 查询。
+
+#### dae
+
+dae 通过 eBPF 程序使用接口的 TC ingress/egress 挂载点，详见 [dae 工作原理](https://github.com/daeuniverse/dae/blob/main/docs/zh/how-it-works.md)。是否能与本项目共存取决于两者是否使用同一个接口：
+
+- dae 只绑定 `br-lan` 等 LAN 接口，而 CAKE Tiny 使用独立的物理 WAN 时，可以共存。
+- dae 的 `wan_interface`（包括 `auto` 最终选中的设备）与 CAKE Tiny 所选物理 WAN 相同时，不能按当前实现共存。dae 会在该设备创建 `clsact`，而 CAKE Tiny 需要安装 ingress qdisc 将下载流量重定向到 IFB；本项目检测到已有 `ingress` 或 `clsact` 后会拒绝接管。
+- 启动顺序不能解决同一 WAN 上的挂载冲突。需要代理下游设备时，建议让 dae 只绑定 LAN，物理 WAN 由 CAKE Tiny 独占。
+
+dae 直连且仍由内核转发、NAT 的 IPv4 流量可以受益于 CAKE 的 NAT 查询。代理流量则由 dae 重新发起，还可能把多台客户端复用到同一加密隧道；CAKE 仍能整形隧道总带宽并控制延迟，但通常无法按隧道内的原始客户端公平分配。
+
+以上两种代理方式都不会改变物理 WAN 的链路封装，因此无需修改链路层计费预设。物理 WAN 承载 PPPoE 时，CAKE 在此处看到的 PPPoE 帧通常无法进行 IPv4 NAT 查询。使用 CAKE 时建议关闭硬件流量卸载；若统计计数不随负载增长，也要检查软件流量卸载和实际流量路径。
+
 ### 常见 WAN 接入方式
 
 | 接入方式                          | WAN 设备选择                 | 注意事项                                                     |
@@ -37,8 +57,6 @@
 | 上级设备拨号，本机通过 DHCP 上网  | 连接上级设备的物理网卡       | 只有经过本机的流量会被整形；直连上级设备的终端不受控制。     |
 | 上级设备桥接，本机通过 PPPoE 拨号 | 承载 PPPoE 的物理网卡        | 本项目的规则装在所选网卡上，而不是 `pppoe-wan`。             |
 | 本机 PPPoE 拨号并使用 VLAN        | 通常仍选承载 VLAN 的物理网卡 | 先确认网络配置中的上联设备及标签是否已计入该设备看到的包长。 |
-
-sing-box 的 TUN、`auto_route` 和 `auto_redirect` 可以与本项目同时使用。CAKE 整形最终经过所选物理 WAN 的流量。`nat=1` 会在上传和下载 CAKE 上查询 IPv4 NAT 连接，可能改善经内核直接转发的多设备流量公平性；sing-box 代理或 `direct` 出站重新发起的连接无法借此还原原始内网设备，IPv6 也不依赖此查询。若使用 `auto_redirect` 的内核级 `bypass` 放行直连 IPv4，且本机执行 NAT，这个选项才更可能有用。物理 WAN 承载 PPPoE 时，CAKE 在此处看到的 PPPoE 帧通常无法进行 IPv4 NAT 查询。使用 CAKE 时建议关闭硬件流量卸载；若统计计数不随负载增长，也要检查软件流量卸载和实际流量路径。
 
 ### 链路层计费
 
@@ -54,14 +72,14 @@ sing-box 的 TUN、`auto_route` 和 `auto_redirect` 可以与本项目同时使�
 
 当前项目只内置以下选项：
 
-| 界面选项         | 传给 CAKE 的参数     | 说明                                                |
-| ---------------- | -------------------- | --------------------------------------------------- |
-| 无（原始包长）   | `raw`                | 默认选项，直接按 Linux 报告的包长计费               |
-| Ethernet         | `overhead 38 mpu 84` | 普通以太网参考值，例如 DHCP 且无 VLAN               |
-| FTTH，封装未知   | `overhead 44 mpu 84` | PON 封装和运营商计费方式未知时的保守起点            |
-| PPPoE，无 VLAN   | `overhead 46 mpu 84` | 以 IP 包长为基础，加完整以太网和 PPPoE/PPP 开销     |
-| PPPoE，单层 VLAN | `overhead 50 mpu 84` | 在无 VLAN PPPoE 基础上再计入一个 4 字节 VLAN 标签   |
-| 自定义           | 用户填写             | 仅此选项显示 `overhead` 和 `mpu` 输入框             |
+| 界面选项         | 传给 CAKE 的参数     | 说明                                              |
+| ---------------- | -------------------- | ------------------------------------------------- |
+| 无（原始包长）   | `raw`                | 默认选项，直接按 Linux 报告的包长计费             |
+| Ethernet         | `overhead 38 mpu 84` | 普通以太网参考值，例如 DHCP 且无 VLAN             |
+| FTTH，封装未知   | `overhead 44 mpu 84` | PON 封装和运营商计费方式未知时的保守起点          |
+| PPPoE，无 VLAN   | `overhead 46 mpu 84` | 以 IP 包长为基础，加完整以太网和 PPPoE/PPP 开销   |
+| PPPoE，单层 VLAN | `overhead 50 mpu 84` | 在无 VLAN PPPoE 基础上再计入一个 4 字节 VLAN 标签 |
+| 自定义           | 用户填写             | 仅此选项显示 `overhead` 和 `mpu` 输入框           |
 
 MPU 84 来自最小以太网帧 64 字节再加前导码和帧间隙占用。FTTH 的 `44/84` 是封装未知时的经验起点，不是所有光纤线路的精确值；若整形位置看到的包长已经包含部分封装，应避免重复补偿。本项目不启用 ATM/PTM 补偿。
 
