@@ -5,6 +5,9 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+msgid "Status unavailable: %s"
+msgstr "无法获取状态：%s"
+
 msgid "Simple upload and download shaping with tc, IFB and CAKE. No sqm-scripts or traffic priority rules are used. Save & Apply updates the service."
 msgstr "使用 tc、IFB 和 CAKE 对上传、下载进行整形。不使用 sqm-scripts 或流量优先级规则。保存并应用后更新服务。"
 
@@ -14,8 +17,11 @@ msgstr "设置"
 msgid "Enable"
 msgstr "启用"
 
-msgid "Physical WAN device"
-msgstr "WAN 物理接口"
+msgid "WAN device"
+msgstr "WAN 设备"
+
+msgid "Select the device carrying Internet traffic. For PPPoE, prefer pppoe-wan; for DHCP, select the WAN Ethernet or VLAN device."
+msgstr "选择承载互联网流量的设备。PPPoE 建议选择 pppoe-wan；DHCP 选择 WAN 以太网或 VLAN 设备。"
 
 msgid "Select an available WAN device."
 msgstr "请选择可用的 WAN 网口。"
@@ -23,17 +29,17 @@ msgstr "请选择可用的 WAN 网口。"
 msgid "Download limit (Mbps)"
 msgstr "下载速率（Mbps）"
 
-msgid "Upload limit (Mbps)"
-msgstr "上传速率（Mbps）"
-
 msgid "Enter a positive speed in Mbps."
 msgstr "请输入大于零的速率，单位 Mbps。"
 
-msgid "Set this to about 93–95% of your measured upload speed."
-msgstr "建议设为实测上传速率的约 93–95%。"
+msgid "Start at 90–95% of your stable wired download speed measured without shaping, then adjust based on latency under load."
+msgstr "建议先取未启用整形时有线实测稳定下载速率的约 90%～95%，再根据满载时的延迟调整。"
 
-msgid "Current tc statistics"
-msgstr "当前 tc 统计"
+msgid "Upload limit (Mbps)"
+msgstr "上传速率（Mbps）"
+
+msgid "Start at 90–95% of your stable wired upload speed measured without shaping, then adjust based on latency under load."
+msgstr "建议先取未启用整形时有线实测稳定上传速率的约 90%～95%，再根据满载时的延迟调整。"
 
 msgid "IPv4 NAT lookup"
 msgstr "IPv4 NAT 查询"
@@ -71,14 +77,77 @@ msgstr "每包额外开销（字节）"
 msgid "Final CAKE overhead for the custom profile."
 msgstr "自定义预设中 CAKE 最终使用的每包开销。"
 
+msgid "Enter an integer from 0 to 256."
+msgstr "请输入 0 到 256 的整数。"
+
 msgid "Minimum packet unit (bytes)"
 msgstr "最小计费包长（字节）"
 
-msgid "Enter an integer from 0 to 256."
-msgstr "请输入 0 到 256 的整数。"
+msgid "Upload"
+msgstr "上传"
+
+msgid "Download"
+msgstr "下载"
+
+msgid "Direction"
+msgstr "方向"
+
+msgid "Current rate"
+msgstr "当前速率"
+
+msgid "Backlog"
+msgstr "积压"
+
+msgid "Peak queue delay"
+msgstr "峰值队列延迟"
+
+msgid "Drops"
+msgstr "丢包"
+
+msgid "ECN marks"
+msgstr "ECN 标记"
+
+msgid "Traffic"
+msgstr "流量"
+
+msgid "Start at 90–95% of stable wired throughput. Compare idle and loaded ping; lower the affected limit if latency rises under load, then increase gradually."
+msgstr "从有线实测稳定速率的 90–95% 开始。比较空闲与满载时的 ping；若满载延迟升高，调低对应方向的限速，再逐步提高。"
+
+msgid "Queue delay is local, not end-to-end latency. Drops and ECN marks are cumulative congestion-control counters. Rates are sampled every 3 seconds; no traffic can mean an idle link."
+msgstr "队列延迟为本机统计，不是端到端延迟。丢包和 ECN 标记为累计拥塞控制计数。每 3 秒采样速率；没有流量也可能只是链路空闲。"
+
+msgid "If counters stay unchanged during a transfer, check the selected WAN device and flow offloading."
+msgstr "若传输期间计数持续不变，请检查所选 WAN 设备和流量卸载。"
+
+msgid "Waiting for samples"
+msgstr "等待采样"
+
+msgid "Traffic observed"
+msgstr "已观察到流量"
+
+msgid "No traffic observed in this interval"
+msgstr "本次采样间隔未观察到流量"
+
+msgid "Disabled"
+msgstr "已停用"
+
+msgid "Rules complete"
+msgstr "规则完整"
+
+msgid "Rules incomplete or device unavailable"
+msgstr "规则不完整或设备不可用"
+
+msgid "Configured device: %s; sampled device: %s"
+msgstr "配置设备：%s；采样设备：%s"
 
 msgid "No statistics available."
 msgstr "暂无统计数据。"
 
-msgid "Status unavailable: %s"
-msgstr "无法获取状态：%s"
+msgid "Status"
+msgstr "状态"
+
+msgid "Live CAKE status"
+msgstr "实时 CAKE 状态"
+
+msgid "Raw tc statistics"
+msgstr "原始 tc 统计"

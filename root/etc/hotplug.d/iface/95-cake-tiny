@@ -11,7 +11,11 @@ WAN="$(uci -q get cake_tiny.main.wan)"
 [ "$INTERFACE" = wan ] || [ "$DEVICE" = "$WAN" ] || exit 0
 
 if [ "$ACTION" = ifdown ]; then
-	[ "$INTERFACE" = wan ] && /etc/init.d/cake-tiny down
+	# netifd does not provide DEVICE for ifdown. Preserve cleanup for wan
+	# even when its Ethernet, VLAN or PPPoE device still exists.
+	if [ "$INTERFACE" = wan ] || [ "$DEVICE" = "$WAN" ]; then
+		/etc/init.d/cake-tiny down
+	fi
 	exit 0
 fi
 

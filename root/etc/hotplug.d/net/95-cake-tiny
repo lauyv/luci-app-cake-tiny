@@ -12,6 +12,6 @@ WAN="$(uci -q get cake_tiny.main.wan)"
 if [ "$ACTION" = remove ]; then
 	/etc/init.d/cake-tiny down
 elif [ "$(uci -q get cake_tiny.main.enabled)" = 1 ]; then
-	# A recreated physical WAN device loses its qdiscs.
+	# A recreated WAN device loses its qdiscs.
 	/etc/init.d/cake-tiny start
 fi

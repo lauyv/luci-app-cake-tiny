@@ -1,20 +1,44 @@
 #!/bin/sh
+# shellcheck shell=busybox
 
 WAN="$(uci -q get cake_tiny.main.wan)"
 [ -n "$WAN" ] || WAN=eth0
 case "$WAN" in
 	*[!a-zA-Z0-9_.:-]*|'') exit 1 ;;
 esac
-
+CONFIGURED_WAN="$WAN"
 if [ -f /var/run/cake-tiny.wan ]; then
 	read -r ACTIVE_WAN WAN_IDX IFB_IDX STATE_VERSION </var/run/cake-tiny.wan
-	printf 'CAKE Tiny: configured on %s\n\n' "$ACTIVE_WAN"
-else
-	printf 'CAKE Tiny: inactive\n\n'
+	case "$ACTIVE_WAN" in
+		*[!a-zA-Z0-9_.:-]*|'') exit 1 ;;
+	esac
+	WAN="$ACTIVE_WAN"
 fi
-printf '%s\n' "WAN ($WAN):"
-tc -s qdisc show dev "$WAN" 2>&1
-printf '\n%s\n' 'IFB (ifb-cake):'
-tc -s qdisc show dev ifb-cake 2>&1
-printf '\n%s\n' "Ingress filter ($WAN):"
-tc filter show dev "$WAN" parent ffff: 2>&1
+
+# Use the same snapshot for rule verification and displayed statistics.
+read -r SAMPLE_TIME _ </proc/uptime
+CURRENT_WAN_IDX="$(cat "/sys/class/net/$WAN/ifindex" 2>/dev/null)"
+CURRENT_IFB_IDX="$(cat /sys/class/net/ifb-cake/ifindex 2>/dev/null)"
+UPLOAD="$(tc -s qdisc show dev "$WAN" 2>&1)"; UPLOAD_OK=$?
+DOWNLOAD="$(tc -s qdisc show dev ifb-cake 2>&1)"; DOWNLOAD_OK=$?
+FILTER="$(tc -s filter show dev "$WAN" parent ffff: 2>&1)"; FILTER_OK=$?
+COMPLETE=0
+if [ "$STATE_VERSION" = 2 ] && [ -n "$WAN_IDX" ] && [ -n "$IFB_IDX" ] &&
+	[ "$CURRENT_WAN_IDX" = "$WAN_IDX" ] && [ "$CURRENT_IFB_IDX" = "$IFB_IDX" ] &&
+	[ "$UPLOAD_OK" = 0 ] && [ "$DOWNLOAD_OK" = 0 ] && [ "$FILTER_OK" = 0 ] &&
+	printf '%s\n' "$UPLOAD" | grep -Eq '^qdisc cake 1ca: .*root ' &&
+	printf '%s\n' "$UPLOAD" | grep -Eq '^qdisc ingress ffff: ' &&
+	printf '%s\n' "$DOWNLOAD" | grep -Eq '^qdisc cake 1cb: .*root ' &&
+	printf '%s\n' "$FILTER" | awk '
+		/^filter / { owned = /pref 49152 / && /matchall/ }
+		owned && /Egress Redirect to device ifb-cake/ { found = 1 }
+		END { exit !found }
+	'; then
+	COMPLETE=1
+fi
+[ "$1" = --check ] && { [ "$COMPLETE" = 1 ]; exit $?; }
+
+printf 'enabled=%s\n' "$(uci -q get cake_tiny.main.enabled)"
+printf 'configured_device=%s\nactive_device=%s\ncomplete=%s\n' "$CONFIGURED_WAN" "$WAN" "$COMPLETE"
+printf 'sample_time=%s\ndevice_identity=%s/%s\n' "$SAMPLE_TIME" "$CURRENT_WAN_IDX" "$CURRENT_IFB_IDX"
+printf '\n[upload]\n%s\n\n[download]\n%s\n\n[filter]\n%s\n' "$UPLOAD" "$DOWNLOAD" "$FILTER"
