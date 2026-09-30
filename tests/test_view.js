@@ -16,6 +16,11 @@ function E(tag, attrs, children) {
     parentNode: null,
     childNodes: [],
     appendChild(child) {
+      if (child && child.nodeType === 11) {
+        const children = child.childNodes.splice(0);
+        children.forEach((entry) => this.appendChild(entry));
+        return child;
+      }
       this.childNodes.push(child);
       if (typeof child === 'object') child.parentNode = this;
     },
@@ -59,7 +64,7 @@ class Map {
   }
 }
 
-let callback, result;
+let callback, result, selectedTab = 0;
 const source = fs.readFileSync('htdocs/luci-static/resources/view/network/cake-tiny.js', 'utf8');
 const view = new Function('form', 'fs', 'poll', 'ui', 'view', 'widgets', 'E', '_', source)(
   { Map, NamedSection: {} },
@@ -80,7 +85,7 @@ const view = new Function('form', 'fs', 'poll', 'ui', 'view', 'widgets', 'E', '_
       initTabGroup(nodes) {
         const group = nodes[0].parentNode;
         group.parentNode.insertBefore(E('ul', { class: 'cbi-tabmenu' }), group);
-        nodes[0].attrs['data-tab-active'] = 'true';
+        nodes[selectedTab].attrs['data-tab-active'] = 'true';
       },
     },
   },
@@ -110,10 +115,44 @@ function contents(node) {
   assert.equal(calls, 0, 'Settings tab must not poll status');
   assert.equal(panes[0].attrs['data-tab'], 'settings');
   assert.equal(panes[1].attrs['data-tab'], 'status');
+  const actions = E('div', { class: 'cbi-page-actions' }, [E('button', {}, 'Save & Apply'), E('button', {}, 'Save'), E('button', {}, 'Reset')]);
+  const fragment = E('fragment', {}, [actions]);
+  fragment.nodeType = 11;
+  view.super = (method) => {
+    assert.equal(method, 'addFooter');
+    return fragment;
+  };
+  const footer = view.addFooter();
+  assert.equal(footer, fragment, 'Return the standard LuCI footer fragment');
+  assert.equal(footer.style, undefined, 'DocumentFragment has no style property');
+  assert.equal(footer.childNodes.length, 0, 'Appending a fragment consumes its children');
+  assert.equal(actions.parentNode, panes[0], 'Native actions belong to the settings pane');
+  root.appendChild(footer);
+  assert.equal(root.childNodes.length, 2, 'Do not mount a second global action bar');
+  result = sample(1, 100);
+  panes[0].attrs['data-tab-active'] = 'false';
+  panes[1].attrs['data-tab-active'] = 'true';
+  panes[1]['cbi-tab-active']();
+  assert.doesNotMatch(contents(panes[1]), /Save|Reset/, 'Status pane contains no form actions');
+  await new Promise((resolve) => setImmediate(resolve));
+  panes[0].attrs['data-tab-active'] = 'true';
+  panes[1].attrs['data-tab-active'] = 'false';
+  assert.equal(actions.parentNode, panes[0], 'Actions remain mounted when switching tabs');
+  const callsBeforeSettingsPoll = calls;
+  await callback();
+  assert.equal(calls, callsBeforeSettingsPoll, 'Returning to settings stops status polling');
   panes[1].attrs['data-tab-active'] = 'true';
   const summary = panes[1].childNodes[1];
   const table = summary.childNodes[2];
   const cell = table.childNodes[1].childNodes[1];
+  table.childNodes.forEach((row) => {
+    assert.match(row.attrs.class, /\btr\b/);
+    row.childNodes.forEach((cell) => {
+      assert.equal(cell.attrs.class, cell.tag === 'th' ? 'th' : 'td');
+      assert.equal(cell.attrs.style, undefined, 'Use theme table styles');
+      if (cell.tag === 'th') assert.equal(cell.attrs.scope, 'col');
+    });
+  });
   result = sample(4, 3000100);
   await callback();
   assert.match(contents(root), /8.00 Mbps/);
@@ -135,5 +174,20 @@ function contents(node) {
   await callback();
   assert.match(contents(root), /Waiting for samples/);
   assert.doesNotMatch(contents(root), /RPC unavailable/);
-  console.log('View tab mounting, device selection, incremental updates and error recovery passed');
+  selectedTab = 1;
+  const restoredRoot = await view.render(sample(16, 2000, '9/10'));
+  const restoredPanes = restoredRoot.childNodes[1].childNodes;
+  const restoredActions = E('div', { class: 'cbi-page-actions' }, 'Save');
+  const restoredFragment = E('fragment', {}, [restoredActions]);
+  restoredFragment.nodeType = 11;
+  view.super = () => restoredFragment;
+  restoredRoot.appendChild(view.addFooter());
+  assert.equal(restoredPanes[1].attrs['data-tab-active'], 'true');
+  assert.equal(restoredActions.parentNode, restoredPanes[0], 'Restored status tab still keeps actions inside settings');
+  assert.doesNotMatch(contents(restoredPanes[1]), /Save/);
+  const emptyFragment = E('fragment');
+  emptyFragment.nodeType = 11;
+  view.super = () => emptyFragment;
+  assert.equal(view.addFooter(), emptyFragment, 'An empty native footer must also be supported');
+  console.log('View tab mounting, native footer lifecycle, device selection, incremental updates and error recovery passed');
 })();

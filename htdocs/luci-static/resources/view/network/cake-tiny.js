@@ -7,6 +7,14 @@
 'require tools.widgets as widgets';
 
 return view.extend({
+  addFooter: function () {
+    var footer = this.super('addFooter', arguments);
+    // Keep LuCI's standard actions inside the editable tab. Appending the
+    // fragment moves its children, so the returned fragment is now empty.
+    this.settingsPane.appendChild(footer);
+    return footer;
+  },
+
   load: function () {
     return fs.exec('/usr/libexec/cake-tiny-status', []).catch(function (err) {
       return { stdout: _('Status unavailable: %s').format(err.message) };
@@ -14,7 +22,9 @@ return view.extend({
   },
 
   render: function (status) {
-    var m, s, o;
+    var m,
+      s,
+      o;
 
     m = new form.Map('cake_tiny', 'CAKE Tiny');
     m.description = _('Simple upload and download shaping with tc, IFB and CAKE. No sqm-scripts or traffic priority rules are used. Save & Apply updates the service.');
@@ -102,9 +112,9 @@ return view.extend({
       var cells = {},
         rows = ['upload', 'download'].map(function (direction) {
           cells[direction] = Array.from({ length: 6 }, function () {
-            return E('td', {}, '—');
+            return E('td', { class: 'td' }, '—');
           });
-          return E('tr', {}, [E('td', {}, direction === 'upload' ? _('Upload') : _('Download'))].concat(cells[direction]));
+          return E('tr', { class: 'tr' }, [E('td', { class: 'td' }, direction === 'upload' ? _('Upload') : _('Download'))].concat(cells[direction]));
         });
       summary.appendChild(stateText);
       summary.appendChild(deviceText);
@@ -117,7 +127,7 @@ return view.extend({
               'tr',
               { class: 'tr table-titles' },
               [_('Direction'), _('Current rate'), _('Backlog'), _('Peak queue delay'), _('Drops'), _('ECN marks'), _('Traffic')].map(function (label) {
-                return E('th', {}, label);
+                return E('th', { class: 'th', scope: 'col' }, label);
               }),
             ),
           ].concat(rows),
@@ -211,10 +221,11 @@ return view.extend({
       poll.add(function () {
         if (statusPane.getAttribute('data-tab-active') === 'true') return refresh();
       }, 3);
-      var panes = E('div', {}, [E('div', { 'data-tab': 'settings', 'data-tab-title': _('Settings') }, [node]), statusPane]);
+      this.settingsPane = E('div', { 'data-tab': 'settings', 'data-tab-title': _('Settings') }, [node]);
+      var panes = E('div', {}, [this.settingsPane, statusPane]);
       var root = E('div', { class: 'cbi-section' }, [panes]);
       ui.tabs.initTabGroup(panes.childNodes);
       return root;
-    });
+    }.bind(this));
   },
 });
