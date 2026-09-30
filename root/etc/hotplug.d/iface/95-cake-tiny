@@ -2,8 +2,8 @@
 # shellcheck shell=busybox
 
 case "$ACTION" in
-	ifup|ifupdate|ifdown) ;;
-	*) exit 0 ;;
+  ifup|ifupdate|ifdown) ;;
+  *) exit 0 ;;
 esac
 
 WAN="$(uci -q get cake_tiny.main.wan)"
@@ -11,21 +11,21 @@ WAN="$(uci -q get cake_tiny.main.wan)"
 [ "$INTERFACE" = wan ] || [ "$DEVICE" = "$WAN" ] || exit 0
 
 if [ "$ACTION" = ifdown ]; then
-	# netifd does not provide DEVICE for ifdown. Preserve cleanup for wan
-	# even when its Ethernet, VLAN or PPPoE device still exists.
-	if [ "$INTERFACE" = wan ] || [ "$DEVICE" = "$WAN" ]; then
-		/etc/init.d/cake-tiny down
-	fi
-	exit 0
+  # netifd does not provide DEVICE for ifdown. Preserve cleanup for wan
+  # even when its Ethernet, VLAN or PPPoE device still exists.
+  if [ "$INTERFACE" = wan ] || [ "$DEVICE" = "$WAN" ]; then
+    /etc/init.d/cake-tiny down
+  fi
+  exit 0
 fi
 
 [ "$(uci -q get cake_tiny.main.enabled)" = 1 ] || exit 0
 [ -d "/sys/class/net/$WAN" ] || exit 0
 # A normal link flap preserves qdiscs; only reapply after they disappear.
 if ! tc qdisc show dev "$WAN" 2>/dev/null | grep -Eq '^qdisc cake 1ca: root ' ||
-	! tc qdisc show dev "$WAN" 2>/dev/null | grep -Eq '^qdisc ingress ' ||
-	! tc qdisc show dev ifb-cake 2>/dev/null | grep -Eq '^qdisc cake 1cb: root ' ||
-	! tc filter show dev "$WAN" parent ffff: pref 49152 2>/dev/null |
-		grep -Fq 'Egress Redirect to device ifb-cake'; then
-	/etc/init.d/cake-tiny start
+  ! tc qdisc show dev "$WAN" 2>/dev/null | grep -Eq '^qdisc ingress ' ||
+  ! tc qdisc show dev ifb-cake 2>/dev/null | grep -Eq '^qdisc cake 1cb: root ' ||
+  ! tc filter show dev "$WAN" parent ffff: pref 49152 2>/dev/null |
+    grep -Fq 'Egress Redirect to device ifb-cake'; then
+  /etc/init.d/cake-tiny start
 fi

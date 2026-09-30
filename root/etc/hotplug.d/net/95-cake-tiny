@@ -2,16 +2,16 @@
 # shellcheck shell=busybox
 
 case "$ACTION" in
-	add|remove) ;;
-	*) exit 0 ;;
+  add|remove) ;;
+  *) exit 0 ;;
 esac
 WAN="$(uci -q get cake_tiny.main.wan)"
 [ -n "$WAN" ] || WAN=eth0
 [ "$DEVICENAME" = "$WAN" ] || exit 0
 
 if [ "$ACTION" = remove ]; then
-	/etc/init.d/cake-tiny down
+  /etc/init.d/cake-tiny down
 elif [ "$(uci -q get cake_tiny.main.enabled)" = 1 ]; then
-	# A recreated WAN device loses its qdiscs.
-	/etc/init.d/cake-tiny start
+  # A recreated WAN device loses its qdiscs.
+  /etc/init.d/cake-tiny start
 fi

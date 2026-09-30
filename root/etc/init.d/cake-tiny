@@ -1,6 +1,7 @@
 #!/bin/sh /etc/rc.common
 # shellcheck shell=busybox
 
+# shellcheck disable=SC2034
 START=95
 STOP=10
 USE_PROCD=1
@@ -15,261 +16,261 @@ IFB_HANDLE=1cb:
 FILTER_PREF=49152
 
 log() {
-	logger -t cake-tiny "$*"
+  logger -t cake-tiny "$*"
 }
 
 valid_rate() {
-	printf '%s\n' "$1" | grep -Eq '^[0-9]+([.][0-9]+)?$' &&
-		awk -v rate="$1" 'BEGIN { exit !(rate > 0) }'
+  printf '%s\n' "$1" | grep -Eq '^[0-9]+([.][0-9]+)?$' &&
+    awk -v rate="$1" 'BEGIN { exit !(rate > 0) }'
 }
 
 valid_device() {
-	case "$1" in lo|ifb*) return 1 ;; esac
-	printf '%s\n' "$1" | grep -Eq '^[a-zA-Z0-9_.:-]{1,15}$'
+  case "$1" in lo|ifb*) return 1 ;; esac
+  printf '%s\n' "$1" | grep -Eq '^[a-zA-Z0-9_.:-]{1,15}$'
 }
 
 valid_accounting() {
-	printf '%s\n' "$1" | grep -Eq '^[0-9]{1,3}$' && [ "$1" -le 256 ]
+  printf '%s\n' "$1" | grep -Eq '^[0-9]{1,3}$' && [ "$1" -le 256 ]
 }
 
 valid_link_profile() {
-	case "$1" in
-		raw|ethernet|ftth|pppoe|pppoe_vlan|custom) return 0 ;;
-		*) return 1 ;;
-	esac
+  case "$1" in
+    raw|ethernet|ftth|pppoe|pppoe_vlan|custom) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 cleanup() {
-	local old_wan old_wan_idx old_ifb_idx old_version filters qdiscs
-	[ -f "$STATE" ] || { rm -f "$PARAMS"; return 0; }
-	read -r old_wan old_wan_idx old_ifb_idx old_version <"$STATE"
-	[ "$old_version" = 2 ] || return 1
-	if valid_device "$old_wan" && [ -n "$old_wan_idx" ] &&
-		[ "$(cat "/sys/class/net/$old_wan/ifindex" 2>/dev/null)" = "$old_wan_idx" ]; then
-		if [ -n "$old_ifb_idx" ] &&
-			[ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" = "$old_ifb_idx" ]; then
-			if tc filter show dev "$old_wan" parent ffff: pref "$FILTER_PREF" 2>/dev/null |
-				grep -Fq "Egress Redirect to device $IFB"; then
-				tc filter del dev "$old_wan" parent ffff: protocol all pref "$FILTER_PREF" handle 1 matchall 2>/dev/null
-			fi
-			filters="$(tc filter show dev "$old_wan" parent ffff: 2>/dev/null)"
-			if [ -z "$filters" ] && tc qdisc show dev "$old_wan" 2>/dev/null |
-				grep -Eq '^qdisc ingress ffff: parent ffff:fff1'; then
-				tc qdisc del dev "$old_wan" ingress 2>/dev/null
-			fi
-		fi
-		if tc qdisc show dev "$old_wan" 2>/dev/null | grep -Eq "^qdisc cake $WAN_HANDLE root "; then
-			tc qdisc del dev "$old_wan" root 2>/dev/null
-		fi
-	fi
-	if [ -n "$old_ifb_idx" ] &&
-		[ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" = "$old_ifb_idx" ]; then
-		qdiscs="$(tc qdisc show dev "$IFB" 2>/dev/null)"
-		if printf '%s\n' "$qdiscs" | grep -Eq "^qdisc (cake $IFB_HANDLE|noqueue 0:|noop 0:|fq_codel 0:|pfifo_fast 0:) root "; then
-			tc qdisc del dev "$IFB" root 2>/dev/null
-			ip link set "$IFB" down 2>/dev/null
-			ip link del "$IFB" 2>/dev/null
-		fi
-	fi
-	rm -f "$STATE" "$PARAMS"
+  local old_wan old_wan_idx old_ifb_idx old_version filters qdiscs
+  [ -f "$STATE" ] || { rm -f "$PARAMS"; return 0; }
+  read -r old_wan old_wan_idx old_ifb_idx old_version <"$STATE"
+  [ "$old_version" = 2 ] || return 1
+  if valid_device "$old_wan" && [ -n "$old_wan_idx" ] &&
+    [ "$(cat "/sys/class/net/$old_wan/ifindex" 2>/dev/null)" = "$old_wan_idx" ]; then
+    if [ -n "$old_ifb_idx" ] &&
+      [ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" = "$old_ifb_idx" ]; then
+      if tc filter show dev "$old_wan" parent ffff: pref "$FILTER_PREF" 2>/dev/null |
+        grep -Fq "Egress Redirect to device $IFB"; then
+        tc filter del dev "$old_wan" parent ffff: protocol all pref "$FILTER_PREF" handle 1 matchall 2>/dev/null
+      fi
+      filters="$(tc filter show dev "$old_wan" parent ffff: 2>/dev/null)"
+      if [ -z "$filters" ] && tc qdisc show dev "$old_wan" 2>/dev/null |
+        grep -Eq '^qdisc ingress ffff: parent ffff:fff1'; then
+        tc qdisc del dev "$old_wan" ingress 2>/dev/null
+      fi
+    fi
+    if tc qdisc show dev "$old_wan" 2>/dev/null | grep -Eq "^qdisc cake $WAN_HANDLE root "; then
+      tc qdisc del dev "$old_wan" root 2>/dev/null
+    fi
+  fi
+  if [ -n "$old_ifb_idx" ] &&
+    [ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" = "$old_ifb_idx" ]; then
+    qdiscs="$(tc qdisc show dev "$IFB" 2>/dev/null)"
+    if printf '%s\n' "$qdiscs" | grep -Eq "^qdisc (cake $IFB_HANDLE|noqueue 0:|noop 0:|fq_codel 0:|pfifo_fast 0:) root "; then
+      tc qdisc del dev "$IFB" root 2>/dev/null
+      ip link set "$IFB" down 2>/dev/null
+      ip link del "$IFB" 2>/dev/null
+    fi
+  fi
+  rm -f "$STATE" "$PARAMS"
 }
 
 check_wan_conflicts() {
-	local qdiscs filters owned="$2"
-	qdiscs="$(tc qdisc show dev "$1")" || return 1
-	if printf '%s\n' "$qdiscs" | grep -Eq '^qdisc (ingress|clsact) '; then
-		filters="$(tc filter show dev "$1" parent ffff: 2>/dev/null)"
-		if [ "$owned" != 1 ] || printf '%s\n' "$qdiscs" | grep -Eq '^qdisc clsact '; then
-			log "$1 already has an ingress/clsact qdisc"
-			return 1
-		fi
-		if [ -n "$filters" ] &&
-			{ ! tc filter show dev "$1" parent ffff: pref "$FILTER_PREF" 2>/dev/null |
-				grep -Fq "Egress Redirect to device $IFB" ||
-				printf '%s\n' "$filters" | grep -E '^filter parent ' |
-					grep -Ev "^filter parent ffff: protocol all pref $FILTER_PREF matchall " | grep -q .; }; then
-			log "$1 already has an ingress/clsact qdisc"
-			return 1
-		fi
-	fi
-	if [ "$owned" = 1 ]; then
-		qdiscs="$(printf '%s\n' "$qdiscs" | grep -Ev "^qdisc cake $WAN_HANDLE root ")"
-	fi
-	if printf '%s\n' "$qdiscs" | grep -E '^qdisc .* root ' |
-		grep -Ev '^qdisc (mq|noqueue|fq_codel|pfifo_fast) 0: root ' | grep -q .; then
-		log "$1 already has a non-default root qdisc"
-		return 1
-	fi
+  local qdiscs filters owned="$2"
+  qdiscs="$(tc qdisc show dev "$1")" || return 1
+  if printf '%s\n' "$qdiscs" | grep -Eq '^qdisc (ingress|clsact) '; then
+    filters="$(tc filter show dev "$1" parent ffff: 2>/dev/null)"
+    if [ "$owned" != 1 ] || printf '%s\n' "$qdiscs" | grep -Eq '^qdisc clsact '; then
+      log "$1 already has an ingress/clsact qdisc"
+      return 1
+    fi
+    if [ -n "$filters" ] &&
+      { ! tc filter show dev "$1" parent ffff: pref "$FILTER_PREF" 2>/dev/null |
+        grep -Fq "Egress Redirect to device $IFB" ||
+        printf '%s\n' "$filters" | grep -E '^filter parent ' |
+          grep -Ev "^filter parent ffff: protocol all pref $FILTER_PREF matchall " | grep -q .; }; then
+      log "$1 already has an ingress/clsact qdisc"
+      return 1
+    fi
+  fi
+  if [ "$owned" = 1 ]; then
+    qdiscs="$(printf '%s\n' "$qdiscs" | grep -Ev "^qdisc cake $WAN_HANDLE root ")"
+  fi
+  if printf '%s\n' "$qdiscs" | grep -E '^qdisc .* root ' |
+    grep -Ev '^qdisc (mq|noqueue|fq_codel|pfifo_fast) 0: root ' | grep -q .; then
+    log "$1 already has a non-default root qdisc"
+    return 1
+  fi
 }
 
 start_service() {
-	local enabled wan download upload nat nat_mode link_profile link_details overhead mpu old_wan old_wan_idx old_ifb_idx old_version wan_idx ifb_idx owned previous_nat previous_profile previous_overhead previous_mpu previous_upload previous_download
-	config_load cake_tiny
-	config_get_bool enabled main enabled 0
-	if [ "$enabled" != 1 ]; then
-		cleanup
-		return 0
-	fi
-	config_get wan main wan eth0
-	config_get download main download 140
-	config_get upload main upload 30
-	config_get_bool nat main nat 1
-	config_get link_profile main link_profile raw
-	config_get overhead main overhead 44
-	config_get mpu main mpu 84
+  local enabled wan download upload nat nat_mode link_profile link_details overhead mpu old_wan old_wan_idx old_ifb_idx old_version wan_idx ifb_idx owned previous_nat previous_profile previous_overhead previous_mpu previous_upload previous_download
+  config_load cake_tiny
+  config_get_bool enabled main enabled 0
+  if [ "$enabled" != 1 ]; then
+    cleanup
+    return 0
+  fi
+  config_get wan main wan eth0
+  config_get download main download 140
+  config_get upload main upload 30
+  config_get_bool nat main nat 1
+  config_get link_profile main link_profile raw
+  config_get overhead main overhead 44
+  config_get mpu main mpu 84
 
-	if ! valid_device "$wan" || ! valid_rate "$download" || ! valid_rate "$upload"; then
-		log "invalid interface or rate in /etc/config/cake_tiny"
-		return 1
-	fi
-	if ! valid_link_profile "$link_profile"; then
-		log "invalid link profile in /etc/config/cake_tiny"
-		return 1
-	fi
-	case "$link_profile" in
-		raw)
-			overhead=0; mpu=0
-			set -- raw
-			link_details=raw
-			;;
-		ethernet)
-			overhead=38; mpu=84
-			set -- overhead "$overhead" mpu "$mpu"
-			link_details='ethernet overhead=38 mpu=84'
-			;;
-		ftth)
-			overhead=44; mpu=84
-			set -- overhead "$overhead" mpu "$mpu"
-			link_details='ftth overhead=44 mpu=84'
-			;;
-		pppoe)
-			overhead=46; mpu=84
-			set -- overhead "$overhead" mpu "$mpu"
-			link_details='pppoe overhead=46 mpu=84'
-			;;
-		pppoe_vlan)
-			overhead=50; mpu=84
-			set -- overhead "$overhead" mpu "$mpu"
-			link_details='pppoe_vlan overhead=50 mpu=84'
-			;;
-		custom)
-			if ! valid_accounting "$overhead" || ! valid_accounting "$mpu"; then
-				log "invalid custom link accounting in /etc/config/cake_tiny"
-				return 1
-			fi
-			set -- overhead "$overhead" mpu "$mpu"
-			link_details="custom overhead=$overhead mpu=$mpu"
-			;;
-	esac
-	nat_mode=nonat
-	[ "$nat" = 1 ] && nat_mode=nat
-	if [ ! -d "/sys/class/net/$wan" ]; then
-		log "interface $wan does not exist"
-		return 1
-	fi
-	if [ -f "$STATE" ]; then
-		read -r old_wan old_wan_idx old_ifb_idx old_version <"$STATE"
-	fi
-	if [ -e "/sys/class/net/$IFB" ] &&
-		[ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" != "$old_ifb_idx" ]; then
-		log "$IFB already exists; refusing to modify it"
-		return 1
-	fi
-	owned=0
-	if [ "$wan" = "$old_wan" ] &&
-		[ "$(cat "/sys/class/net/$wan/ifindex" 2>/dev/null)" = "$old_wan_idx" ]; then
-		owned=1
-	fi
-	check_wan_conflicts "$wan" "$owned" || return 1
-	# Only update live, verified queues when all non-rate settings are unchanged.
-	if [ "$owned" = 1 ] && [ "$old_version" = 2 ] && [ -f "$PARAMS" ] &&
-		status_service >/dev/null; then
-		read -r previous_nat previous_profile previous_overhead previous_mpu previous_upload previous_download <"$PARAMS"
-		if [ "$previous_nat $previous_profile $previous_overhead $previous_mpu" = "$nat_mode $link_profile $overhead $mpu" ] &&
-			valid_rate "$previous_upload" && valid_rate "$previous_download"; then
-			if [ "$upload $download" = "$previous_upload $previous_download" ]; then
-				return 0
-			fi
-			if [ "$upload" != "$previous_upload" ] &&
-				! tc qdisc change dev "$wan" root handle "$WAN_HANDLE" cake bandwidth "${upload}Mbit"; then
-				log "failed to update upload rate; retaining existing queues"
-				return 1
-			fi
-			if [ "$download" != "$previous_download" ] &&
-				! tc qdisc change dev "$IFB" root handle "$IFB_HANDLE" cake bandwidth "${download}Mbit"; then
-				if [ "$upload" != "$previous_upload" ] &&
-					! tc qdisc change dev "$wan" root handle "$WAN_HANDLE" cake bandwidth "${previous_upload}Mbit"; then
-					log "failed to restore upload rate; forcing rebuild on next apply"
-					rm -f "$PARAMS"
-				fi
-				log "failed to update download rate"
-				return 1
-			fi
-			printf '%s %s %s %s %s %s\n' "$nat_mode" "$link_profile" "$overhead" "$mpu" "$upload" "$download" >"$PARAMS" || {
-				rm -f "$PARAMS"
-				log "rates changed but active settings could not be recorded"
-				return 1
-			}
-			log "rates updated in place: wan=$wan down=${download}Mbit up=${upload}Mbit"
-			return 0
-		fi
-	fi
-	cleanup || return 1
+  if ! valid_device "$wan" || ! valid_rate "$download" || ! valid_rate "$upload"; then
+    log "invalid interface or rate in /etc/config/cake_tiny"
+    return 1
+  fi
+  if ! valid_link_profile "$link_profile"; then
+    log "invalid link profile in /etc/config/cake_tiny"
+    return 1
+  fi
+  case "$link_profile" in
+    raw)
+      overhead=0; mpu=0
+      set -- raw
+      link_details=raw
+      ;;
+    ethernet)
+      overhead=38; mpu=84
+      set -- overhead "$overhead" mpu "$mpu"
+      link_details='ethernet overhead=38 mpu=84'
+      ;;
+    ftth)
+      overhead=44; mpu=84
+      set -- overhead "$overhead" mpu "$mpu"
+      link_details='ftth overhead=44 mpu=84'
+      ;;
+    pppoe)
+      overhead=46; mpu=84
+      set -- overhead "$overhead" mpu "$mpu"
+      link_details='pppoe overhead=46 mpu=84'
+      ;;
+    pppoe_vlan)
+      overhead=50; mpu=84
+      set -- overhead "$overhead" mpu "$mpu"
+      link_details='pppoe_vlan overhead=50 mpu=84'
+      ;;
+    custom)
+      if ! valid_accounting "$overhead" || ! valid_accounting "$mpu"; then
+        log "invalid custom link accounting in /etc/config/cake_tiny"
+        return 1
+      fi
+      set -- overhead "$overhead" mpu "$mpu"
+      link_details="custom overhead=$overhead mpu=$mpu"
+      ;;
+  esac
+  nat_mode=nonat
+  [ "$nat" = 1 ] && nat_mode=nat
+  if [ ! -d "/sys/class/net/$wan" ]; then
+    log "interface $wan does not exist"
+    return 1
+  fi
+  if [ -f "$STATE" ]; then
+    read -r old_wan old_wan_idx old_ifb_idx old_version <"$STATE"
+  fi
+  if [ -e "/sys/class/net/$IFB" ] &&
+    [ "$(cat "/sys/class/net/$IFB/ifindex" 2>/dev/null)" != "$old_ifb_idx" ]; then
+    log "$IFB already exists; refusing to modify it"
+    return 1
+  fi
+  owned=0
+  if [ "$wan" = "$old_wan" ] &&
+    [ "$(cat "/sys/class/net/$wan/ifindex" 2>/dev/null)" = "$old_wan_idx" ]; then
+    owned=1
+  fi
+  check_wan_conflicts "$wan" "$owned" || return 1
+  # Only update live, verified queues when all non-rate settings are unchanged.
+  if [ "$owned" = 1 ] && [ "$old_version" = 2 ] && [ -f "$PARAMS" ] &&
+    status_service >/dev/null; then
+    read -r previous_nat previous_profile previous_overhead previous_mpu previous_upload previous_download <"$PARAMS"
+    if [ "$previous_nat $previous_profile $previous_overhead $previous_mpu" = "$nat_mode $link_profile $overhead $mpu" ] &&
+      valid_rate "$previous_upload" && valid_rate "$previous_download"; then
+      if [ "$upload $download" = "$previous_upload $previous_download" ]; then
+        return 0
+      fi
+      if [ "$upload" != "$previous_upload" ] &&
+        ! tc qdisc change dev "$wan" root handle "$WAN_HANDLE" cake bandwidth "${upload}Mbit"; then
+        log "failed to update upload rate; retaining existing queues"
+        return 1
+      fi
+      if [ "$download" != "$previous_download" ] &&
+        ! tc qdisc change dev "$IFB" root handle "$IFB_HANDLE" cake bandwidth "${download}Mbit"; then
+        if [ "$upload" != "$previous_upload" ] &&
+          ! tc qdisc change dev "$wan" root handle "$WAN_HANDLE" cake bandwidth "${previous_upload}Mbit"; then
+          log "failed to restore upload rate; forcing rebuild on next apply"
+          rm -f "$PARAMS"
+        fi
+        log "failed to update download rate"
+        return 1
+      fi
+      printf '%s %s %s %s %s %s\n' "$nat_mode" "$link_profile" "$overhead" "$mpu" "$upload" "$download" >"$PARAMS" || {
+        rm -f "$PARAMS"
+        log "rates changed but active settings could not be recorded"
+        return 1
+      }
+      log "rates updated in place: wan=$wan down=${download}Mbit up=${upload}Mbit"
+      return 0
+    fi
+  fi
+  cleanup || return 1
 
-	modprobe ifb 2>/dev/null
-	if ! ip link add "$IFB" type ifb; then
-		log "failed to create $IFB"
-		return 1
-	fi
-	# Remember device identities so cleanup cannot remove a recreated device.
-	wan_idx="$(cat "/sys/class/net/$wan/ifindex")"
-	ifb_idx="$(cat "/sys/class/net/$IFB/ifindex")"
-	if ! printf '%s %s %s 2\n' "$wan" "$wan_idx" "$ifb_idx" >"$STATE"; then
-		ip link del "$IFB" 2>/dev/null
-		log "failed to record qdisc ownership"
-		return 1
-	fi
-	if ! ip link set "$IFB" up ||
-		! tc qdisc replace dev "$wan" root handle "$WAN_HANDLE" cake bandwidth "${upload}Mbit" besteffort "$nat_mode" dual-srchost "$@" ||
-		! tc qdisc replace dev "$wan" handle ffff: ingress ||
-		! tc filter add dev "$wan" parent ffff: protocol all pref "$FILTER_PREF" handle 1 matchall action mirred egress redirect dev "$IFB" ||
-		! tc qdisc replace dev "$IFB" root handle "$IFB_HANDLE" cake bandwidth "${download}Mbit" besteffort ingress "$nat_mode" dual-dsthost "$@"; then
-		log "failed to install CAKE rules"
-		cleanup
-		return 1
-	fi
-	if ! printf '%s %s %s %s %s %s\n' "$nat_mode" "$link_profile" "$overhead" "$mpu" "$upload" "$download" >"$PARAMS"; then
-		log "failed to record active settings"
-		cleanup
-		return 1
-	fi
-	log "enabled: wan=$wan down=${download}Mbit up=${upload}Mbit nat=$nat_mode link=$link_details"
+  modprobe ifb 2>/dev/null
+  if ! ip link add "$IFB" type ifb; then
+    log "failed to create $IFB"
+    return 1
+  fi
+  # Remember device identities so cleanup cannot remove a recreated device.
+  wan_idx="$(cat "/sys/class/net/$wan/ifindex")"
+  ifb_idx="$(cat "/sys/class/net/$IFB/ifindex")"
+  if ! printf '%s %s %s 2\n' "$wan" "$wan_idx" "$ifb_idx" >"$STATE"; then
+    ip link del "$IFB" 2>/dev/null
+    log "failed to record qdisc ownership"
+    return 1
+  fi
+  if ! ip link set "$IFB" up ||
+    ! tc qdisc replace dev "$wan" root handle "$WAN_HANDLE" cake bandwidth "${upload}Mbit" besteffort "$nat_mode" dual-srchost "$@" ||
+    ! tc qdisc replace dev "$wan" handle ffff: ingress ||
+    ! tc filter add dev "$wan" parent ffff: protocol all pref "$FILTER_PREF" handle 1 matchall action mirred egress redirect dev "$IFB" ||
+    ! tc qdisc replace dev "$IFB" root handle "$IFB_HANDLE" cake bandwidth "${download}Mbit" besteffort ingress "$nat_mode" dual-dsthost "$@"; then
+    log "failed to install CAKE rules"
+    cleanup
+    return 1
+  fi
+  if ! printf '%s %s %s %s %s %s\n' "$nat_mode" "$link_profile" "$overhead" "$mpu" "$upload" "$download" >"$PARAMS"; then
+    log "failed to record active settings"
+    cleanup
+    return 1
+  fi
+  log "enabled: wan=$wan down=${download}Mbit up=${upload}Mbit nat=$nat_mode link=$link_details"
 }
 
 stop_service() {
-	cleanup
-	log "stopped"
+  cleanup
+  log "stopped"
 }
 
 down() {
-	procd_lock
-	cleanup
-	log "WAN went down"
+  procd_lock
+  cleanup
+  log "WAN went down"
 }
 
 status_service() {
-	if /usr/libexec/cake-tiny-status --check; then
-		echo "CAKE Tiny rules are complete"
-	else
-		echo "CAKE Tiny is inactive or rules are incomplete"
-		return 1
-	fi
+  if /usr/libexec/cake-tiny-status --check; then
+    echo "CAKE Tiny rules are complete"
+  else
+    echo "CAKE Tiny is inactive or rules are incomplete"
+    return 1
+  fi
 }
 
 reload_service() {
-	start_service
+  start_service
 }
 
 service_triggers() {
-	procd_add_reload_trigger cake_tiny
+  procd_add_reload_trigger cake_tiny
 }
